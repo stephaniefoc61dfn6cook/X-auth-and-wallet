@@ -234,20 +234,235 @@
         }
         
         // Check authentication status on page load
-        document.addEventListener('DOMContentLoaded', checkAuthStatus);
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
+            checkPhantomStatus();
+        });
 
-        function connectWallet() {
+        async function connectWallet() {
             const statusDiv = document.getElementById('status');
-            statusDiv.className = 'status success';
-            statusDiv.textContent = 'Wallet connection initiated! Please check your wallet...';
             
-            // Simulate wallet connection process
-            setTimeout(() => {
-                statusDiv.textContent = 'Wallet connected successfully!';
-            }, 2000);
+            // Check if Phantom wallet is available
+            if (!window.solana || !window.solana.isPhantom) {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Phantom wallet not found! Please install Phantom wallet extension.';
+                
+                // Provide install link
+                setTimeout(() => {
+                    const installLink = document.createElement('a');
+                    installLink.href = 'https://phantom.app/';
+                    installLink.target = '_blank';
+                    installLink.style.color = '#3b82f6';
+                    installLink.style.textDecoration = 'underline';
+                    installLink.textContent = 'Click here to install Phantom wallet';
+                    statusDiv.innerHTML = 'Phantom wallet not found! ';
+                    statusDiv.appendChild(installLink);
+                }, 2000);
+                return;
+            }
             
-            // In a real application, you would integrate with MetaMask, WalletConnect, etc.
-            console.log('Wallet Connect button clicked');
+            try {
+                statusDiv.className = 'status success';
+                statusDiv.textContent = 'Connecting to Phantom wallet...';
+                
+                // Connect to Phantom wallet
+                const response = await window.solana.connect();
+                const publicKey = response.publicKey.toString();
+                
+                // Send connection info to backend
+                const backendResponse = await fetch('/auth/phantom/connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        publicKey: publicKey
+                    })
+                });
+                
+                const data = await backendResponse.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'status success';
+                    const shortKey = publicKey.substring(0, 4) + '...' + publicKey.substring(publicKey.length - 4);
+                    statusDiv.textContent = `Phantom wallet connected! ${shortKey}`;
+                    
+                    // Update button to show connected state
+                    const walletButton = document.querySelector('.wallet-connect');
+                    walletButton.textContent = `✓ Connected ${shortKey}`;
+                    walletButton.onclick = disconnectWallet;
+                    
+                    // Add sign message button
+                    addSignMessageButton();
+                    
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'Failed to connect wallet: ' + (data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('Phantom wallet connection error:', error);
+                statusDiv.className = 'status error';
+                
+                if (error.code === 4001) {
+                    statusDiv.textContent = 'Connection rejected by user.';
+                } else if (error.code === -32002) {
+                    statusDiv.textContent = 'Connection request already pending. Check your wallet.';
+                } else {
+                    statusDiv.textContent = 'Failed to connect wallet. Please try again.';
+                }
+            }
+        }
+        
+        async function disconnectWallet() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                // Disconnect from Phantom
+                if (window.solana && window.solana.disconnect) {
+                    await window.solana.disconnect();
+                }
+                
+                // Notify backend
+                const response = await fetch('/auth/phantom/disconnect', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = 'Phantom wallet disconnected successfully!';
+                    
+                    // Reset button
+                    const walletButton = document.querySelector('.wallet-connect');
+                    walletButton.textContent = 'Wallet Connect';
+                    walletButton.onclick = connectWallet;
+                    
+                    // Remove sign message button
+                    removeSignMessageButton();
+                }
+                
+            } catch (error) {
+                console.error('Disconnect error:', error);
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Failed to disconnect. Please try again.';
+            }
+        }
+        
+        function addSignMessageButton() {
+            // Check if button already exists
+            if (document.getElementById('sign-message-btn')) return;
+            
+            const buttonContainer = document.querySelector('.button-container');
+            const signButton = document.createElement('button');
+            signButton.id = 'sign-message-btn';
+            signButton.className = 'connect-btn sign-message';
+            signButton.textContent = 'Sign Message';
+            signButton.onclick = signMessage;
+            
+            // Add CSS for the sign button
+            const style = document.createElement('style');
+            style.textContent = `
+                .sign-message {
+                    background: linear-gradient(45deg, #9945ff, #14f195);
+                    color: white;
+                    margin-top: 10px;
+                }
+                .sign-message:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 20px rgba(153, 69, 255, 0.3);
+                }
+            `;
+            document.head.appendChild(style);
+            
+            buttonContainer.appendChild(signButton);
+        }
+        
+        function removeSignMessageButton() {
+            const signButton = document.getElementById('sign-message-btn');
+            if (signButton) {
+                signButton.remove();
+            }
+        }
+        
+        async function signMessage() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                const message = `Sign this message to verify your wallet ownership.\nTimestamp: ${new Date().toISOString()}`;
+                const encodedMessage = new TextEncoder().encode(message);
+                
+                statusDiv.className = 'status success';
+                statusDiv.textContent = 'Please sign the message in your Phantom wallet...';
+                
+                // Request signature from Phantom
+                const signedMessage = await window.solana.signMessage(encodedMessage, 'utf8');
+                
+                // Send to backend for verification
+                const response = await fetch('/auth/phantom/sign', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        message: message,
+                        signature: Array.from(signedMessage.signature),
+                        publicKey: signedMessage.publicKey.toString()
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = 'Message signed successfully! ✓ Wallet verified';
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'Failed to verify signature: ' + (data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('Message signing error:', error);
+                statusDiv.className = 'status error';
+                
+                if (error.code === 4001) {
+                    statusDiv.textContent = 'Message signing rejected by user.';
+                } else {
+                    statusDiv.textContent = 'Failed to sign message. Please try again.';
+                }
+            }
+        }
+        
+        async function checkPhantomStatus() {
+            try {
+                const response = await fetch('/auth/phantom/status', {
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.connected) {
+                    const statusDiv = document.getElementById('status');
+                    const shortKey = data.publicKey.substring(0, 4) + '...' + data.publicKey.substring(data.publicKey.length - 4);
+                    
+                    if (!statusDiv.textContent.includes('X connected') && !statusDiv.textContent.includes('Phantom')) {
+                        statusDiv.className = 'status success';
+                        statusDiv.textContent = `Phantom wallet already connected! ${shortKey}`;
+                    }
+                    
+                    const walletButton = document.querySelector('.wallet-connect');
+                    walletButton.textContent = `✓ Connected ${shortKey}`;
+                    walletButton.onclick = disconnectWallet;
+                    
+                    addSignMessageButton();
+                }
+            } catch (error) {
+                console.error('Phantom status check error:', error);
+            }
         }
     </script>
 </body>

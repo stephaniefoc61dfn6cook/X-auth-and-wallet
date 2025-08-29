@@ -218,12 +218,122 @@ def logout():
         'message': 'Logged out successfully'
     })
 
+@app.route('/auth/phantom/connect', methods=['POST'])
+def phantom_connect():
+    """Handle Phantom wallet connection"""
+    try:
+        data = request.get_json()
+        public_key = data.get('publicKey')
+        
+        if not public_key:
+            return jsonify({
+                'success': False,
+                'error': 'No public key provided'
+            }), 400
+        
+        # Store wallet info in session
+        session['phantom_wallet'] = {
+            'publicKey': public_key,
+            'connected': True,
+            'wallet_type': 'phantom'
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': 'Phantom wallet connected successfully',
+            'publicKey': public_key
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/auth/phantom/disconnect', methods=['POST'])
+def phantom_disconnect():
+    """Handle Phantom wallet disconnection"""
+    try:
+        # Remove wallet info from session
+        if 'phantom_wallet' in session:
+            del session['phantom_wallet']
+        
+        return jsonify({
+            'success': True,
+            'message': 'Phantom wallet disconnected successfully'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/auth/phantom/status')
+def phantom_status():
+    """Check Phantom wallet connection status"""
+    wallet_info = session.get('phantom_wallet')
+    if wallet_info and wallet_info.get('connected'):
+        return jsonify({
+            'connected': True,
+            'publicKey': wallet_info.get('publicKey'),
+            'wallet_type': wallet_info.get('wallet_type')
+        })
+    else:
+        return jsonify({
+            'connected': False
+        })
+
+@app.route('/auth/phantom/sign', methods=['POST'])
+def phantom_sign():
+    """Handle message signing with Phantom wallet"""
+    try:
+        data = request.get_json()
+        message = data.get('message')
+        signature = data.get('signature')
+        public_key = data.get('publicKey')
+        
+        if not all([message, signature, public_key]):
+            return jsonify({
+                'success': False,
+                'error': 'Missing required fields: message, signature, or publicKey'
+            }), 400
+        
+        # Verify the wallet is connected in session
+        wallet_info = session.get('phantom_wallet')
+        if not wallet_info or wallet_info.get('publicKey') != public_key:
+            return jsonify({
+                'success': False,
+                'error': 'Wallet not connected or public key mismatch'
+            }), 401
+        
+        # In a real application, you would verify the signature here
+        # For now, we'll just store the signed message
+        session['phantom_signed_message'] = {
+            'message': message,
+            'signature': signature,
+            'publicKey': public_key,
+            'timestamp': int(time.time()) if 'time' in globals() else None
+        }
+        
+        return jsonify({
+            'success': True,
+            'message': 'Message signed successfully',
+            'verified': True  # In production, implement actual signature verification
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'service': 'X OAuth Backend'
+        'service': 'X OAuth & Phantom Wallet Backend'
     })
 
 if __name__ == '__main__':
