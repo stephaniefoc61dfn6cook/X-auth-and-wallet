@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect Buttons</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            font-weight: 300;
+        }
+
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .connect-btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .x-connect {
+            background: linear-gradient(45deg, #1da1f2, #0d8bd9);
+            color: white;
+        }
+
+        .x-connect:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(29, 161, 242, 0.3);
+        }
+
+        .wallet-connect {
+            background: linear-gradient(45deg, #3b82f6, #1d4ed8);
+            color: white;
+        }
+
+        .wallet-connect:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .connect-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            min-height: 20px;
+        }
+
+        .status.success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .status.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fca5a5;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Connect Your Account</h1>
+        <div class="button-container">
+            <button class="connect-btn x-connect" onclick="connectX()">
+                X Connect
+            </button>
+            <button class="connect-btn wallet-connect" onclick="connectWallet()">
+                Wallet Connect
+            </button>
+        </div>
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        async function connectX() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status success';
+            statusDiv.textContent = 'X connection initiated! Redirecting to X authentication...';
+            
+            try {
+                // Call backend to initiate X OAuth
+                const response = await fetch('/auth/x/login', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Open X OAuth in a popup window
+                    const popup = window.open(
+                        data.auth_url,
+                        'x_oauth',
+                        'width=600,height=700,scrollbars=yes,resizable=yes'
+                    );
+                    
+                    // Listen for authentication completion
+                    window.addEventListener('message', function(event) {
+                        if (event.data.type === 'X_AUTH_SUCCESS') {
+                            popup.close();
+                            statusDiv.className = 'status success';
+                            statusDiv.textContent = `X connected successfully! Welcome, ${event.data.user.name || event.data.user.username}!`;
+                            
+                            // Update button to show connected state
+                            const xButton = document.querySelector('.x-connect');
+                            xButton.textContent = `✓ Connected as ${event.data.user.username}`;
+                            xButton.onclick = disconnectX;
+                        }
+                    });
+                    
+                    // Check if popup was closed without authentication
+                    const checkClosed = setInterval(() => {
+                        if (popup.closed) {
+                            clearInterval(checkClosed);
+                            // Check authentication status
+                            checkAuthStatus();
+                        }
+                    }, 1000);
+                    
+                } else {
+                    statusDiv.className = 'status error';
+                    statusDiv.textContent = 'Failed to initiate X authentication: ' + (data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('X Connect error:', error);
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Connection error. Please try again.';
+            }
+        }
+        
+        async function disconnectX() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                const response = await fetch('/auth/logout', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = 'Disconnected from X successfully!';
+                    
+                    // Reset button
+                    const xButton = document.querySelector('.x-connect');
+                    xButton.textContent = 'X Connect';
+                    xButton.onclick = connectX;
+                }
+            } catch (error) {
+                console.error('Disconnect error:', error);
+                statusDiv.className = 'status error';
+                statusDiv.textContent = 'Failed to disconnect. Please try again.';
+            }
+        }
+        
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/auth/status', {
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    const statusDiv = document.getElementById('status');
+                    statusDiv.className = 'status success';
+                    statusDiv.textContent = `Already connected as ${data.user.name || data.user.username}!`;
+                    
+                    const xButton = document.querySelector('.x-connect');
+                    xButton.textContent = `✓ Connected as ${data.user.username}`;
+                    xButton.onclick = disconnectX;
+                }
+            } catch (error) {
+                console.error('Auth status check error:', error);
+            }
+        }
+        
+        // Check authentication status on page load
+        document.addEventListener('DOMContentLoaded', checkAuthStatus);
+
+        function connectWallet() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'status success';
+            statusDiv.textContent = 'Wallet connection initiated! Please check your wallet...';
+            
+            // Simulate wallet connection process
+            setTimeout(() => {
+                statusDiv.textContent = 'Wallet connected successfully!';
+            }, 2000);
+            
+            // In a real application, you would integrate with MetaMask, WalletConnect, etc.
+            console.log('Wallet Connect button clicked');
+        }
+    </script>
+</body>
+</html>
