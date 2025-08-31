@@ -194,9 +194,31 @@
                         </div>
                     </div>
                     
+                    <!-- Chart Time Filters -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-muted-foreground">Timeframe:</span>
+                            <div class="flex gap-1">
+                                <button onclick="changeTimeframe('15m')" id="filter-15m" class="px-3 py-1 text-xs rounded-md bg-secondary hover:bg-gaming-primary hover:text-white transition-colors">15m</button>
+                                <button onclick="changeTimeframe('30m')" id="filter-30m" class="px-3 py-1 text-xs rounded-md bg-secondary hover:bg-gaming-primary hover:text-white transition-colors">30m</button>
+                                <button onclick="changeTimeframe('1h')" id="filter-1h" class="px-3 py-1 text-xs rounded-md bg-gaming-primary text-white">1h</button>
+                                <button onclick="changeTimeframe('4h')" id="filter-4h" class="px-3 py-1 text-xs rounded-md bg-secondary hover:bg-gaming-primary hover:text-white transition-colors">4h</button>
+                            </div>
+                        </div>
+                        <button onclick="openTradingView()" class="px-4 py-2 text-sm bg-gradient-gaming hover:opacity-90 transition-opacity rounded-lg text-white font-semibold">
+                            📈 Advanced Chart
+                        </button>
+                    </div>
+                    
                     <!-- Chart Container -->
-                    <div class="bg-background/50 rounded-xl p-4">
-                        <canvas id="btcChart" width="400" height="200"></canvas>
+                    <div class="bg-background/50 rounded-xl p-4 relative" style="height: 300px;">
+                        <canvas id="btcChart"></canvas>
+                        <div id="chartLoading" class="absolute inset-0 flex items-center justify-center bg-background/80 rounded-xl">
+                            <div class="flex items-center gap-3">
+                                <div class="w-6 h-6 border-2 border-gaming-primary border-t-transparent rounded-full animate-spin"></div>
+                                <span class="text-muted-foreground">Loading chart...</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -303,6 +325,26 @@
         </div>
     </div>
 
+    <!-- TradingView Modal -->
+    <div id="tradingViewModal" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-background/80 backdrop-blur-md" onclick="closeTradingView()"></div>
+        <div class="relative z-10 w-full h-full max-w-7xl max-h-[90vh] m-4">
+            <div class="glass-effect rounded-2xl p-4 h-full flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                        📈 Advanced BTC Trading Chart
+                    </h2>
+                    <button onclick="closeTradingView()" class="px-4 py-2 bg-red-500 hover:bg-red-600 transition-colors rounded-lg text-white font-semibold">
+                        ✕ Close
+                    </button>
+                </div>
+                <div class="flex-1 bg-background/50 rounded-xl overflow-hidden">
+                    <div id="tradingview-widget" class="w-full h-full"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Sign Message Button (appears after wallet connection) -->
     <div id="signMessageContainer" class="hidden fixed bottom-6 right-6">
         <button 
@@ -319,6 +361,8 @@
         let btcChart;
         let currentBTCPrice = 0;
         let priceHistory = [];
+        let currentTimeframe = '1h';
+        let tradingViewWidget = null;
 
         // Close welcome modal and show dashboard
         function closeWelcomeModal() {
@@ -378,9 +422,18 @@
         }
 
         // Fetch BTC price history for chart
-        async function fetchBTCHistory() {
+        async function fetchBTCHistory(timeframe = currentTimeframe) {
             try {
-                const response = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1&interval=hourly');
+                // Map timeframes to API parameters
+                const timeframeMap = {
+                    '15m': { days: 0.25, interval: '5m' },
+                    '30m': { days: 0.5, interval: '5m' },
+                    '1h': { days: 1, interval: 'hourly' },
+                    '4h': { days: 4, interval: 'hourly' }
+                };
+                
+                const params = timeframeMap[timeframe] || timeframeMap['1h'];
+                const response = await fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=${params.days}&interval=${params.interval}`);
                 const data = await response.json();
                 
                 if (data.prices) {
@@ -389,7 +442,7 @@
                         price: price
                     }));
                     
-                    // Calculate 24h high and low
+                    // Calculate high and low for the timeframe
                     const prices = data.prices.map(p => p[1]);
                     const high = Math.max(...prices);
                     const low = Math.min(...prices);
@@ -397,15 +450,19 @@
                     document.getElementById('priceHigh').textContent = `$${high.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                     document.getElementById('priceLow').textContent = `$${low.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
                     
-                    console.log(`BTC History Updated: ${priceHistory.length} data points`);
+                    console.log(`BTC History Updated: ${priceHistory.length} data points for ${timeframe}`);
                 }
             } catch (error) {
                 console.error('Error fetching BTC history:', error);
+                document.getElementById('chartLoading').innerHTML = '<div class="text-red-400">Error loading chart</div>';
             }
         }
 
         // Create BTC price chart
         function createBTCChart() {
+            // Hide loading indicator
+            document.getElementById('chartLoading').style.display = 'none';
+            
             const ctx = document.getElementById('btcChart').getContext('2d');
             
             btcChart = new Chart(ctx, {
@@ -489,10 +546,81 @@
         // Update chart with new data
         function updateChart() {
             if (btcChart && priceHistory.length > 0) {
-                btcChart.data.labels = priceHistory.map(p => p.time.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}));
+                // Format time labels based on timeframe
+                let timeFormat;
+                if (currentTimeframe === '15m' || currentTimeframe === '30m') {
+                    timeFormat = { hour: '2-digit', minute: '2-digit' };
+                } else {
+                    timeFormat = { month: 'short', day: 'numeric', hour: '2-digit' };
+                }
+                
+                btcChart.data.labels = priceHistory.map(p => p.time.toLocaleTimeString('en-US', timeFormat));
                 btcChart.data.datasets[0].data = priceHistory.map(p => p.price);
                 btcChart.update('none'); // No animation for updates
             }
+        }
+
+        // Change timeframe
+        async function changeTimeframe(timeframe) {
+            currentTimeframe = timeframe;
+            
+            // Update button states
+            document.querySelectorAll('[id^="filter-"]').forEach(btn => {
+                btn.className = 'px-3 py-1 text-xs rounded-md bg-secondary hover:bg-gaming-primary hover:text-white transition-colors';
+            });
+            document.getElementById(`filter-${timeframe}`).className = 'px-3 py-1 text-xs rounded-md bg-gaming-primary text-white';
+            
+            // Show loading
+            document.getElementById('chartLoading').style.display = 'flex';
+            
+            // Fetch new data and update chart
+            await fetchBTCHistory(timeframe);
+            updateChart();
+            
+            // Hide loading
+            document.getElementById('chartLoading').style.display = 'none';
+        }
+
+        // Open TradingView modal
+        function openTradingView() {
+            document.getElementById('tradingViewModal').classList.remove('hidden');
+            
+            // Initialize TradingView widget if not already done
+            if (!tradingViewWidget) {
+                initTradingViewWidget();
+            }
+        }
+
+        // Close TradingView modal
+        function closeTradingView() {
+            document.getElementById('tradingViewModal').classList.add('hidden');
+        }
+
+        // Initialize TradingView widget
+        function initTradingViewWidget() {
+            const script = document.createElement('script');
+            script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+            script.type = 'text/javascript';
+            script.async = true;
+            script.innerHTML = JSON.stringify({
+                "autosize": true,
+                "symbol": "BINANCE:BTCUSDT",
+                "interval": "15",
+                "timezone": "Etc/UTC",
+                "theme": "dark",
+                "style": "1",
+                "locale": "en",
+                "enable_publishing": false,
+                "allow_symbol_change": true,
+                "calendar": false,
+                "support_host": "https://www.tradingview.com"
+            });
+            
+            const container = document.getElementById('tradingview-widget');
+            container.innerHTML = ''; // Clear existing content
+            container.appendChild(script);
+            
+            tradingViewWidget = true;
         }
 
         // X OAuth Functions
