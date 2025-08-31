@@ -7,6 +7,7 @@ import base64
 import hashlib
 from urllib.parse import urlencode, parse_qs
 import json
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-change-in-production')
@@ -373,25 +374,33 @@ def btc_history():
     """Get BTC price history via backend proxy"""
     try:
         timeframe = request.args.get('timeframe', '1h')
+        print(f"Fetching BTC history for timeframe: {timeframe}")
         
-        # Map timeframes to hours
-        timeframe_hours = {
-            '15m': 1,
-            '30m': 2, 
-            '1h': 24,
-            '4h': 96
+        # Map timeframes to hours and intervals
+        timeframe_config = {
+            '15m': {'limit': 24, 'endpoint': 'histominute', 'aggregate': 15},
+            '30m': {'limit': 48, 'endpoint': 'histominute', 'aggregate': 30},
+            '1h': {'limit': 24, 'endpoint': 'histohour', 'aggregate': 1},
+            '4h': {'limit': 24, 'endpoint': 'histohour', 'aggregate': 4}
         }
         
-        hours = timeframe_hours.get(timeframe, 24)
+        config = timeframe_config.get(timeframe, timeframe_config['1h'])
         
-        # Use CryptoCompare API for historical data (free, no auth required)
-        url = f'https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USD&limit={hours}&aggregate=1'
+        # Use CryptoCompare API for historical data
+        url = f'https://min-api.cryptocompare.com/data/v2/{config["endpoint"]}?fsym=BTC&tsym=USD&limit={config["limit"]}&aggregate={config["aggregate"]}'
+        print(f"Fetching from URL: {url}")
+        
         response = requests.get(url, timeout=15)
+        print(f"Response status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
-            if data.get('Response') == 'Success':
+            print(f"API Response keys: {list(data.keys())}")
+            
+            # Check if response is successful
+            if data.get('Response') == 'Success' and 'Data' in data and 'Data' in data['Data']:
                 history_data = data['Data']['Data']
+                print(f"Retrieved {len(history_data)} data points")
                 
                 # Format data for frontend
                 formatted_data = []
@@ -401,7 +410,7 @@ def btc_history():
                         'price': item['close'],
                         'high': item['high'],
                         'low': item['low'],
-                        'volume': item['volumeto']
+                        'volume': item.get('volumeto', 0)
                     })
                 
                 return jsonify({
@@ -411,46 +420,96 @@ def btc_history():
                     'source': 'cryptocompare'
                 })
             else:
-                return jsonify({'success': False, 'error': 'Invalid API response'}), 500
+                error_msg = data.get('Message', 'Unknown API error')
+                print(f"API Error: {error_msg}")
+                return jsonify({'success': False, 'error': f'API Error: {error_msg}'}), 500
         else:
-            return jsonify({'success': False, 'error': 'Failed to fetch historical data'}), 500
+            print(f"HTTP Error: {response.status_code} - {response.text}")
+            return jsonify({'success': False, 'error': f'HTTP {response.status_code}'}), 500
             
     except Exception as e:
+        print(f"Exception in btc_history: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/btc/stats')
 def btc_stats():
     """Get BTC statistics (24h high, low, change)"""
     try:
+        print("Fetching BTC stats...")
+        
         # Get 24h data from CryptoCompare
         url = 'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC&tsyms=USD'
         response = requests.get(url, timeout=10)
         
+        print(f"Stats response status: {response.status_code}")
+        
         if response.status_code == 200:
             data = response.json()
-            btc_data = data.get('DISPLAY', {}).get('BTC', {}).get('USD', {})
-            raw_data = data.get('RAW', {}).get('BTC', {}).get('USD', {})
+            print(f"Stats response keys: {list(data.keys())}")
             
-            return jsonify({
-                'success': True,
-                'current_price': raw_data.get('PRICE', 0),
-                'change_24h': raw_data.get('CHANGEPCT24HOUR', 0),
-                'high_24h': raw_data.get('HIGH24HOUR', 0),
-                'low_24h': raw_data.get('LOW24HOUR', 0),
-                'volume_24h': raw_data.get('VOLUME24HOURTO', 0),
-                'formatted': {
-                    'price': btc_data.get('PRICE', '$0'),
-                    'change': btc_data.get('CHANGEPCT24HOUR', '0%'),
-                    'high': btc_data.get('HIGH24HOUR', '$0'),
-                    'low': btc_data.get('LOW24HOUR', '$0')
-                },
-                'source': 'cryptocompare'
-            })
+            # Check if we have the expected data structure
+            if 'RAW' in data and 'BTC' in data['RAW'] and 'USD' in data['RAW']['BTC']:
+                raw_data = data['RAW']['BTC']['USD']
+                display_data = data.get('DISPLAY', {}).get('BTC', {}).get('USD', {})
+                
+                print(f"Raw data keys: {list(raw_data.keys())}")
+                
+                return jsonify({
+                    'success': True,
+                    'current_price': raw_data.get('PRICE', 0),
+                    'change_24h': raw_data.get('CHANGEPCT24HOUR', 0),
+                    'high_24h': raw_data.get('HIGH24HOUR', 0),
+                    'low_24h': raw_data.get('LOW24HOUR', 0),
+                    'volume_24h': raw_data.get('VOLUME24HOURTO', 0),
+                    'formatted': {
+                        'price': display_data.get('PRICE', '$0'),
+                        'change': display_data.get('CHANGEPCT24HOUR', '0%'),
+                        'high': display_data.get('HIGH24HOUR', '$0'),
+                        'low': display_data.get('LOW24HOUR', '$0')
+                    },
+                    'source': 'cryptocompare'
+                })
+            else:
+                # Fallback to simpler API
+                print("Falling back to simple price API")
+                simple_url = 'https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD'
+                simple_response = requests.get(simple_url, timeout=10)
+                
+                if simple_response.status_code == 200:
+                    simple_data = simple_response.json()
+                    price = simple_data.get('USD', 0)
+                    
+                    return jsonify({
+                        'success': True,
+                        'current_price': price,
+                        'change_24h': 0,  # Not available in simple API
+                        'high_24h': price,  # Use current price as fallback
+                        'low_24h': price,   # Use current price as fallback
+                        'volume_24h': 0,
+                        'source': 'cryptocompare-simple'
+                    })
+                else:
+                    return jsonify({'success': False, 'error': 'All APIs failed'}), 500
         else:
-            return jsonify({'success': False, 'error': 'Failed to fetch stats'}), 500
+            print(f"HTTP Error: {response.status_code} - {response.text}")
+            return jsonify({'success': False, 'error': f'HTTP {response.status_code}'}), 500
             
     except Exception as e:
+        print(f"Exception in btc_stats: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/test')
+def api_test():
+    """Test endpoint to verify API is working"""
+    return jsonify({
+        'status': 'success',
+        'message': 'Backend API is working',
+        'timestamp': str(datetime.now()) if 'datetime' in globals() else 'unknown'
+    })
 
 @app.route('/health')
 def health():
