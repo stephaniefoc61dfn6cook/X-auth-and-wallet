@@ -42,6 +42,15 @@ def index():
     except FileNotFoundError:
         return "index.html not found. Please make sure it exists in the project directory."
 
+@app.route('/gaming')
+def gaming_interface():
+    """Serve the gaming interface with Crystal Play Gate design"""
+    try:
+        with open('gaming-index.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "gaming-index.html not found. Please make sure it exists in the project directory."
+
 @app.route('/auth/x/login')
 def x_login():
     """Initiate X OAuth login"""

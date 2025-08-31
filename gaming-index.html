@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crystal Play Gate - X Connect & Phantom Wallet</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        background: 'hsl(220, 13%, 9%)',
+                        foreground: 'hsl(220, 13%, 91%)',
+                        card: 'hsl(220, 13%, 11%)',
+                        'card-foreground': 'hsl(220, 13%, 91%)',
+                        primary: 'hsl(217, 91%, 60%)',
+                        'primary-foreground': 'hsl(220, 13%, 9%)',
+                        secondary: 'hsl(220, 13%, 15%)',
+                        'secondary-foreground': 'hsl(220, 13%, 91%)',
+                        muted: 'hsl(220, 13%, 15%)',
+                        'muted-foreground': 'hsl(220, 9%, 46%)',
+                        accent: 'hsl(262, 83%, 58%)',
+                        'accent-foreground': 'hsl(220, 13%, 91%)',
+                        border: 'hsl(220, 13%, 15%)',
+                        'gaming-primary': 'hsl(217, 91%, 60%)',
+                        'gaming-secondary': 'hsl(262, 83%, 58%)',
+                        'gaming-accent': 'hsl(174, 100%, 29%)',
+                    },
+                    backgroundImage: {
+                        'gradient-primary': 'linear-gradient(135deg, hsl(217, 91%, 60%), hsl(262, 83%, 58%))',
+                        'gradient-gaming': 'linear-gradient(135deg, hsl(174, 100%, 29%), hsl(217, 91%, 60%))',
+                        'gradient-glass': 'linear-gradient(135deg, hsl(220, 13%, 11%, 0.8), hsl(220, 13%, 15%, 0.6))',
+                        'gradient-phantom': 'linear-gradient(45deg, #9945ff, #14f195)',
+                        'gradient-x': 'linear-gradient(45deg, #1da1f2, #0d8bd9)',
+                    },
+                    backdropBlur: {
+                        'glass': '20px',
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.5s ease-in-out',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                        'pulse-gaming': 'pulseGaming 2s infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'scale(0.95)' },
+                            '100%': { opacity: '1', transform: 'scale(1)' }
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        },
+                        pulseGaming: {
+                            '0%, 100%': { boxShadow: '0 0 20px rgba(59, 130, 246, 0.3)' },
+                            '50%': { boxShadow: '0 0 40px rgba(59, 130, 246, 0.6)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-effect {
+            background: linear-gradient(135deg, rgba(34, 40, 49, 0.8), rgba(45, 52, 64, 0.6));
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gaming-glow {
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
+        }
+        .phantom-glow {
+            box-shadow: 0 0 30px rgba(153, 69, 255, 0.3);
+        }
+        .x-glow {
+            box-shadow: 0 0 30px rgba(29, 161, 242, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-background text-foreground">
+    <!-- Liquid Glass Welcome Modal -->
+    <div id="welcomeModal" class="fixed inset-0 z-50 flex items-center justify-center">
+        <div class="absolute inset-0 bg-background/20 backdrop-blur-md"></div>
+        <div class="relative z-10 glass-effect rounded-3xl p-12 mx-4 shadow-2xl animate-fade-in">
+            <div class="text-center space-y-8">
+                <div class="space-y-4">
+                    <h1 class="text-6xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                        Ready to Play?
+                    </h1>
+                    <p class="text-xl text-muted-foreground">
+                        Enter the ultimate crypto gaming experience
+                    </p>
+                </div>
+                <button 
+                    onclick="closeWelcomeModal()"
+                    class="px-12 py-6 text-xl font-semibold bg-gradient-primary hover:opacity-90 transition-opacity shadow-lg rounded-lg border-0 text-primary-foreground"
+                >
+                    Yes, Let's Go!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="mainDashboard" class="hidden min-h-screen">
+        <div class="flex">
+            <!-- Main Content -->
+            <div class="flex-1 p-6">
+                <!-- Navigation -->
+                <div class="mb-4 text-center">
+                    <a href="/" class="text-blue-400 hover:text-blue-300 transition-colors underline">
+                        ← Back to Simple Interface
+                    </a>
+                </div>
+
+                <!-- Header with Auth Buttons -->
+                <header class="flex items-center justify-between mb-8">
+                    <div class="flex items-center gap-4">
+                        <button 
+                            id="phantomConnectBtn"
+                            onclick="connectPhantom()"
+                            class="flex items-center gap-2 px-6 py-3 bg-gradient-phantom hover:opacity-90 transition-opacity rounded-lg text-white font-semibold phantom-glow"
+                        >
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                            </svg>
+                            Phantom Wallet
+                        </button>
+                        
+                        <button 
+                            id="xConnectBtn"
+                            onclick="connectX()"
+                            class="flex items-center gap-2 px-6 py-3 bg-gradient-x hover:opacity-90 transition-opacity rounded-lg text-white font-semibold x-glow"
+                        >
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                            </svg>
+                            X Connect
+                        </button>
+                    </div>
+                    
+                    <div class="flex items-center gap-6">
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-muted-foreground">$COIN Balance:</span>
+                            <div class="bg-gradient-gaming text-primary-foreground px-4 py-1 text-lg font-bold rounded-full">
+                                1,847.50 $COIN
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm text-muted-foreground">User XP:</span>
+                            <div class="bg-gradient-primary text-primary-foreground px-4 py-1 text-lg font-bold rounded-full">
+                                3,250 XP
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Status Display -->
+                <div id="status" class="mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center"></div>
+
+                <!-- BTC Price Card -->
+                <div class="glass-effect rounded-2xl p-6 mb-8 gaming-glow">
+                    <h2 class="text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
+                        BTC Price Prediction
+                    </h2>
+                    <div class="flex items-center justify-between">
+                        <div class="text-center">
+                            <div class="text-sm text-muted-foreground">Current Price</div>
+                            <div class="text-3xl font-bold text-gaming-accent">$44,950</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-sm text-muted-foreground">24h Change</div>
+                            <div class="text-xl font-semibold text-green-400">+2.4%</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-sm text-muted-foreground">Volume</div>
+                            <div class="text-xl font-semibold">$2.8B</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Game Modes -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="glass-effect rounded-2xl p-6 hover:gaming-glow transition-all duration-300 cursor-pointer group">
+                        <div class="text-4xl mb-4">🏆</div>
+                        <h3 class="text-xl font-bold mb-2 group-hover:text-gaming-primary transition-colors">PVP Ranked</h3>
+                        <p class="text-muted-foreground">Competitive matches with ranking system</p>
+                        <div class="mt-4 px-4 py-2 bg-gradient-primary rounded-lg text-center text-primary-foreground font-semibold">
+                            Featured
+                        </div>
+                    </div>
+                    
+                    <div class="glass-effect rounded-2xl p-6 hover:gaming-glow transition-all duration-300 cursor-pointer group">
+                        <div class="text-4xl mb-4">🎮</div>
+                        <h3 class="text-xl font-bold mb-2 group-hover:text-gaming-primary transition-colors">Custom Lobby</h3>
+                        <p class="text-muted-foreground">Create or join custom game rooms</p>
+                    </div>
+                    
+                    <div class="glass-effect rounded-2xl p-6 hover:gaming-glow transition-all duration-300 cursor-pointer group">
+                        <div class="text-4xl mb-4">⚔️</div>
+                        <h3 class="text-xl font-bold mb-2 group-hover:text-gaming-primary transition-colors">Battle Royale</h3>
+                        <p class="text-muted-foreground">Last player standing wins all</p>
+                        <div class="mt-4 px-4 py-2 bg-gradient-gaming rounded-lg text-center text-primary-foreground font-semibold">
+                            Featured
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Bets Section -->
+                <div class="glass-effect rounded-2xl p-6">
+                    <h2 class="text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
+                        Active Bets
+                    </h2>
+                    <div class="text-center text-muted-foreground py-8">
+                        <div class="text-6xl mb-4">🎯</div>
+                        <p>No active bets yet. Start a game to begin!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Friends Sidebar -->
+            <div class="w-80 p-6 border-l border-border">
+                <div class="glass-effect rounded-2xl p-6">
+                    <h2 class="text-xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
+                        Friends Online
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                            <div class="w-8 h-8 bg-gradient-gaming rounded-full"></div>
+                            <div>
+                                <div class="font-semibold">CryptoKing</div>
+                                <div class="text-sm text-muted-foreground">Playing PVP</div>
+                            </div>
+                            <div class="ml-auto w-2 h-2 bg-green-400 rounded-full"></div>
+                        </div>
+                        <div class="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                            <div class="w-8 h-8 bg-gradient-primary rounded-full"></div>
+                            <div>
+                                <div class="font-semibold">DiamondHands</div>
+                                <div class="text-sm text-muted-foreground">In Queue</div>
+                            </div>
+                            <div class="ml-auto w-2 h-2 bg-yellow-400 rounded-full"></div>
+                        </div>
+                        <div class="flex items-center gap-3 p-3 rounded-lg bg-secondary/50">
+                            <div class="w-8 h-8 bg-gradient-phantom rounded-full"></div>
+                            <div>
+                                <div class="font-semibold">Web3Warrior</div>
+                                <div class="text-sm text-muted-foreground">Offline</div>
+                            </div>
+                            <div class="ml-auto w-2 h-2 bg-gray-400 rounded-full"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leaderboard -->
+                <div class="glass-effect rounded-2xl p-6 mt-6">
+                    <h2 class="text-xl font-bold mb-4 bg-gradient-gaming bg-clip-text text-transparent">
+                        Leaderboard
+                    </h2>
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-3 p-2">
+                            <div class="text-yellow-400 font-bold">1st</div>
+                            <div class="flex-1">CryptoMaster</div>
+                            <div class="text-sm text-gaming-accent">15,420 XP</div>
+                        </div>
+                        <div class="flex items-center gap-3 p-2">
+                            <div class="text-gray-400 font-bold">2nd</div>
+                            <div class="flex-1">BlockchainBoss</div>
+                            <div class="text-sm text-gaming-accent">12,890 XP</div>
+                        </div>
+                        <div class="flex items-center gap-3 p-2">
+                            <div class="text-orange-400 font-bold">3rd</div>
+                            <div class="flex-1">DeFiDemon</div>
+                            <div class="text-sm text-gaming-accent">11,240 XP</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sign Message Button (appears after wallet connection) -->
+    <div id="signMessageContainer" class="hidden fixed bottom-6 right-6">
+        <button 
+            id="signMessageBtn"
+            onclick="signMessage()"
+            class="px-6 py-3 bg-gradient-phantom hover:opacity-90 transition-opacity rounded-lg text-white font-semibold phantom-glow animate-pulse-gaming"
+        >
+            Sign Message
+        </button>
+    </div>
+
+    <script>
+        // Close welcome modal and show dashboard
+        function closeWelcomeModal() {
+            document.getElementById('welcomeModal').style.display = 'none';
+            document.getElementById('mainDashboard').classList.remove('hidden');
+            checkAuthStatus();
+            checkPhantomStatus();
+        }
+
+        // X OAuth Functions
+        async function connectX() {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
+            statusDiv.textContent = 'X connection initiated! Redirecting to X authentication...';
+            
+            try {
+                const response = await fetch('/auth/x/login', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const popup = window.open(
+                        data.auth_url,
+                        'x_oauth',
+                        'width=600,height=700,scrollbars=yes,resizable=yes'
+                    );
+                    
+                    window.addEventListener('message', function(event) {
+                        if (event.data.type === 'X_AUTH_SUCCESS') {
+                            popup.close();
+                            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                            statusDiv.textContent = `X connected successfully! Welcome, ${event.data.user.name || event.data.user.username}!`;
+                            
+                            const xButton = document.getElementById('xConnectBtn');
+                            xButton.innerHTML = `
+                                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                </svg>
+                                ✓ ${event.data.user.username}
+                            `;
+                            xButton.onclick = disconnectX;
+                        }
+                    });
+                    
+                    const checkClosed = setInterval(() => {
+                        if (popup.closed) {
+                            clearInterval(checkClosed);
+                            checkAuthStatus();
+                        }
+                    }, 1000);
+                    
+                } else {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                    statusDiv.textContent = 'Failed to initiate X authentication: ' + (data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('X Connect error:', error);
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = 'Connection error. Please try again.';
+            }
+        }
+
+        async function disconnectX() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                const response = await fetch('/auth/logout', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                    statusDiv.textContent = 'Disconnected from X successfully!';
+                    
+                    const xButton = document.getElementById('xConnectBtn');
+                    xButton.innerHTML = `
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        X Connect
+                    `;
+                    xButton.onclick = connectX;
+                }
+            } catch (error) {
+                console.error('Disconnect error:', error);
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = 'Failed to disconnect. Please try again.';
+            }
+        }
+
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/auth/status', {
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    const statusDiv = document.getElementById('status');
+                    if (!statusDiv.textContent.includes('Phantom')) {
+                        statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                        statusDiv.textContent = `Already connected as ${data.user.name || data.user.username}!`;
+                    }
+                    
+                    const xButton = document.getElementById('xConnectBtn');
+                    xButton.innerHTML = `
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                        ✓ ${data.user.username}
+                    `;
+                    xButton.onclick = disconnectX;
+                }
+            } catch (error) {
+                console.error('Auth status check error:', error);
+            }
+        }
+
+        // Phantom Wallet Functions
+        async function connectPhantom() {
+            const statusDiv = document.getElementById('status');
+            
+            if (!window.solana || !window.solana.isPhantom) {
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.innerHTML = `
+                    <div>
+                        <div>Phantom wallet not found! Please install Phantom wallet extension.</div>
+                        <a href="https://phantom.app/" target="_blank" class="text-blue-400 underline hover:text-blue-300 transition-colors">
+                            Click here to install Phantom wallet
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-purple-900/20 border border-purple-500/30 text-purple-300';
+                statusDiv.textContent = 'Connecting to Phantom wallet...';
+                
+                const response = await window.solana.connect();
+                const publicKey = response.publicKey.toString();
+                
+                const backendResponse = await fetch('/auth/phantom/connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        publicKey: publicKey
+                    })
+                });
+                
+                const data = await backendResponse.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                    const shortKey = publicKey.substring(0, 4) + '...' + publicKey.substring(publicKey.length - 4);
+                    statusDiv.textContent = `Phantom wallet connected! ${shortKey}`;
+                    
+                    const phantomButton = document.getElementById('phantomConnectBtn');
+                    phantomButton.innerHTML = `
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                        ✓ ${shortKey}
+                    `;
+                    phantomButton.onclick = disconnectPhantom;
+                    
+                    document.getElementById('signMessageContainer').classList.remove('hidden');
+                    
+                } else {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                    statusDiv.textContent = 'Failed to connect wallet: ' + (data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('Phantom wallet connection error:', error);
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                
+                if (error.code === 4001) {
+                    statusDiv.textContent = 'Connection rejected by user.';
+                } else if (error.code === -32002) {
+                    statusDiv.textContent = 'Connection request already pending. Check your wallet.';
+                } else {
+                    statusDiv.textContent = 'Failed to connect wallet. Please try again.';
+                }
+            }
+        }
+
+        async function disconnectPhantom() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                if (window.solana && window.solana.disconnect) {
+                    await window.solana.disconnect();
+                }
+                
+                const response = await fetch('/auth/phantom/disconnect', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                    statusDiv.textContent = 'Phantom wallet disconnected successfully!';
+                    
+                    const phantomButton = document.getElementById('phantomConnectBtn');
+                    phantomButton.innerHTML = `
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                        Phantom Wallet
+                    `;
+                    phantomButton.onclick = connectPhantom;
+                    
+                    document.getElementById('signMessageContainer').classList.add('hidden');
+                }
+                
+            } catch (error) {
+                console.error('Disconnect error:', error);
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = 'Failed to disconnect. Please try again.';
+            }
+        }
+
+        async function signMessage() {
+            const statusDiv = document.getElementById('status');
+            
+            try {
+                const message = `Sign this message to verify your wallet ownership.\nTimestamp: ${new Date().toISOString()}`;
+                const encodedMessage = new TextEncoder().encode(message);
+                
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-purple-900/20 border border-purple-500/30 text-purple-300';
+                statusDiv.textContent = 'Please sign the message in your Phantom wallet...';
+                
+                const signedMessage = await window.solana.signMessage(encodedMessage, 'utf8');
+                
+                const response = await fetch('/auth/phantom/sign', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        message: message,
+                        signature: Array.from(signedMessage.signature),
+                        publicKey: signedMessage.publicKey.toString()
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                    statusDiv.textContent = 'Message signed successfully! ✓ Wallet verified';
+                } else {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                    statusDiv.textContent = 'Failed to verify signature: ' + (data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('Message signing error:', error);
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                
+                if (error.code === 4001) {
+                    statusDiv.textContent = 'Message signing rejected by user.';
+                } else {
+                    statusDiv.textContent = 'Failed to sign message. Please try again.';
+                }
+            }
+        }
+
+        async function checkPhantomStatus() {
+            try {
+                const response = await fetch('/auth/phantom/status', {
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.connected) {
+                    const statusDiv = document.getElementById('status');
+                    const shortKey = data.publicKey.substring(0, 4) + '...' + data.publicKey.substring(data.publicKey.length - 4);
+                    
+                    if (!statusDiv.textContent.includes('X connected') && !statusDiv.textContent.includes('Phantom')) {
+                        statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                        statusDiv.textContent = `Phantom wallet already connected! ${shortKey}`;
+                    }
+                    
+                    const phantomButton = document.getElementById('phantomConnectBtn');
+                    phantomButton.innerHTML = `
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                        ✓ ${shortKey}
+                    `;
+                    phantomButton.onclick = disconnectPhantom;
+                    
+                    document.getElementById('signMessageContainer').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Phantom status check error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
