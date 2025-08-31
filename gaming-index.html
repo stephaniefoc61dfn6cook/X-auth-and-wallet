@@ -211,12 +211,22 @@
                     </div>
                     
                     <!-- Chart Container -->
-                    <div class="bg-background/50 rounded-xl p-4 relative" style="height: 300px;">
-                        <canvas id="btcChart"></canvas>
+                    <div class="bg-background/50 rounded-xl p-4 relative">
+                        <div style="position: relative; height: 300px; width: 100%;">
+                            <canvas id="btcChart" style="display: block; width: 100%; height: 100%;"></canvas>
+                        </div>
                         <div id="chartLoading" class="absolute inset-0 flex items-center justify-center bg-background/80 rounded-xl">
                             <div class="flex items-center gap-3">
                                 <div class="w-6 h-6 border-2 border-gaming-primary border-t-transparent rounded-full animate-spin"></div>
                                 <span class="text-muted-foreground">Loading chart...</span>
+                            </div>
+                        </div>
+                        <div id="chartError" class="absolute inset-0 hidden items-center justify-center bg-background/80 rounded-xl">
+                            <div class="text-center">
+                                <div class="text-red-400 mb-2">❌ Chart Error</div>
+                                <button onclick="retryChart()" class="px-4 py-2 bg-gaming-primary hover:opacity-90 transition-opacity rounded-lg text-white text-sm">
+                                    🔄 Retry
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -375,17 +385,35 @@
 
         // Initialize BTC price data and chart
         async function initializeBTCData() {
-            await fetchBTCPrice();
-            await fetchBTCHistory();
-            createBTCChart();
-            
-            // Update price every 30 seconds
-            setInterval(fetchBTCPrice, 30000);
-            // Update chart every 5 minutes
-            setInterval(() => {
-                fetchBTCHistory();
-                updateChart();
-            }, 300000);
+            try {
+                console.log('Initializing BTC data...');
+                
+                // Show loading
+                document.getElementById('chartLoading').style.display = 'flex';
+                document.getElementById('chartError').style.display = 'none';
+                
+                // Fetch data sequentially with error handling
+                await fetchBTCPrice();
+                await fetchBTCHistory();
+                
+                // Wait a moment for DOM to be ready
+                setTimeout(() => {
+                    createBTCChart();
+                }, 100);
+                
+                // Update price every 30 seconds
+                setInterval(fetchBTCPrice, 30000);
+                // Update chart every 5 minutes
+                setInterval(() => {
+                    fetchBTCHistory();
+                    updateChart();
+                }, 300000);
+                
+                console.log('BTC data initialization complete');
+            } catch (error) {
+                console.error('Failed to initialize BTC data:', error);
+                showChartError();
+            }
         }
 
         // Fetch current BTC price from CoinGecko API
@@ -454,16 +482,45 @@
                 }
             } catch (error) {
                 console.error('Error fetching BTC history:', error);
-                document.getElementById('chartLoading').innerHTML = '<div class="text-red-400">Error loading chart</div>';
+                priceHistory = []; // Reset to empty array
+                throw error; // Re-throw to be caught by calling function
             }
         }
 
         // Create BTC price chart
         function createBTCChart() {
-            // Hide loading indicator
-            document.getElementById('chartLoading').style.display = 'none';
-            
-            const ctx = document.getElementById('btcChart').getContext('2d');
+            try {
+                console.log('Creating BTC chart...');
+                
+                // Check if we have data
+                if (!priceHistory || priceHistory.length === 0) {
+                    console.error('No price history data available');
+                    showChartError();
+                    return;
+                }
+                
+                // Get canvas element
+                const canvas = document.getElementById('btcChart');
+                if (!canvas) {
+                    console.error('Canvas element not found');
+                    showChartError();
+                    return;
+                }
+                
+                // Destroy existing chart if it exists
+                if (btcChart) {
+                    btcChart.destroy();
+                    btcChart = null;
+                }
+                
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    console.error('Could not get 2D context from canvas');
+                    showChartError();
+                    return;
+                }
+                
+                console.log(`Creating chart with ${priceHistory.length} data points`);
             
             btcChart = new Chart(ctx, {
                 type: 'line',
@@ -541,6 +598,47 @@
                     }
                 }
             });
+            
+            // Hide loading indicator on success
+            document.getElementById('chartLoading').style.display = 'none';
+            document.getElementById('chartError').style.display = 'none';
+            
+            console.log('BTC chart created successfully');
+            
+            } catch (error) {
+                console.error('Error creating BTC chart:', error);
+                showChartError();
+            }
+        }
+        
+        // Show chart error
+        function showChartError() {
+            document.getElementById('chartLoading').style.display = 'none';
+            document.getElementById('chartError').style.display = 'flex';
+        }
+        
+        // Retry chart creation
+        async function retryChart() {
+            console.log('Retrying chart creation...');
+            document.getElementById('chartError').style.display = 'none';
+            
+            // Check if Chart.js is loaded
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js is not loaded');
+                document.getElementById('chartError').innerHTML = `
+                    <div class="text-center">
+                        <div class="text-red-400 mb-2">📊 Chart library not loaded</div>
+                        <div class="text-sm text-muted-foreground mb-3">Refreshing page may help</div>
+                        <button onclick="window.location.reload()" class="px-4 py-2 bg-gaming-primary hover:opacity-90 transition-opacity rounded-lg text-white text-sm">
+                            🔄 Refresh Page
+                        </button>
+                    </div>
+                `;
+                document.getElementById('chartError').style.display = 'flex';
+                return;
+            }
+            
+            await initializeBTCData();
         }
 
         // Update chart with new data
@@ -562,23 +660,34 @@
 
         // Change timeframe
         async function changeTimeframe(timeframe) {
-            currentTimeframe = timeframe;
-            
-            // Update button states
-            document.querySelectorAll('[id^="filter-"]').forEach(btn => {
-                btn.className = 'px-3 py-1 text-xs rounded-md bg-secondary hover:bg-gaming-primary hover:text-white transition-colors';
-            });
-            document.getElementById(`filter-${timeframe}`).className = 'px-3 py-1 text-xs rounded-md bg-gaming-primary text-white';
-            
-            // Show loading
-            document.getElementById('chartLoading').style.display = 'flex';
-            
-            // Fetch new data and update chart
-            await fetchBTCHistory(timeframe);
-            updateChart();
-            
-            // Hide loading
-            document.getElementById('chartLoading').style.display = 'none';
+            try {
+                console.log(`Changing timeframe to: ${timeframe}`);
+                currentTimeframe = timeframe;
+                
+                // Update button states
+                document.querySelectorAll('[id^="filter-"]').forEach(btn => {
+                    btn.className = 'px-3 py-1 text-xs rounded-md bg-secondary hover:bg-gaming-primary hover:text-white transition-colors';
+                });
+                document.getElementById(`filter-${timeframe}`).className = 'px-3 py-1 text-xs rounded-md bg-gaming-primary text-white';
+                
+                // Show loading
+                document.getElementById('chartLoading').style.display = 'flex';
+                document.getElementById('chartError').style.display = 'none';
+                
+                // Fetch new data and update chart
+                await fetchBTCHistory(timeframe);
+                
+                if (priceHistory && priceHistory.length > 0) {
+                    updateChart();
+                    document.getElementById('chartLoading').style.display = 'none';
+                } else {
+                    showChartError();
+                }
+                
+            } catch (error) {
+                console.error('Error changing timeframe:', error);
+                showChartError();
+            }
         }
 
         // Open TradingView modal
