@@ -416,15 +416,18 @@
             }
         }
 
-        // Fetch current BTC price from CoinGecko API
+        // Fetch current BTC price and stats from backend
         async function fetchBTCPrice() {
             try {
-                const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true');
+                // Fetch comprehensive stats from backend
+                const response = await fetch('/api/btc/stats');
                 const data = await response.json();
                 
-                if (data.bitcoin) {
-                    const price = data.bitcoin.usd;
-                    const change = data.bitcoin.usd_24h_change;
+                if (data.success) {
+                    const price = data.current_price;
+                    const change = data.change_24h;
+                    const high = data.high_24h;
+                    const low = data.low_24h;
                     
                     currentBTCPrice = price;
                     
@@ -437,48 +440,45 @@
                     changeElement.textContent = changeText;
                     changeElement.className = `text-xl font-semibold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
                     
+                    // Update 24h high and low
+                    document.getElementById('priceHigh').textContent = `$${high.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    document.getElementById('priceLow').textContent = `$${low.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    
                     // Update status indicator
                     document.getElementById('priceStatus').className = 'w-2 h-2 bg-green-400 rounded-full animate-pulse';
                     
-                    console.log(`BTC Price Updated: $${price}`);
+                    console.log(`BTC Price Updated: $${price} (Source: ${data.source})`);
+                } else {
+                    throw new Error(data.error || 'Failed to fetch price data');
                 }
             } catch (error) {
                 console.error('Error fetching BTC price:', error);
                 document.getElementById('priceStatus').className = 'w-2 h-2 bg-red-400 rounded-full';
                 document.getElementById('currentPrice').textContent = 'Error loading';
+                document.getElementById('priceChange').textContent = 'N/A';
+                document.getElementById('priceHigh').textContent = 'N/A';
+                document.getElementById('priceLow').textContent = 'N/A';
             }
         }
 
-        // Fetch BTC price history for chart
+        // Fetch BTC price history for chart from backend
         async function fetchBTCHistory(timeframe = currentTimeframe) {
             try {
-                // Map timeframes to API parameters
-                const timeframeMap = {
-                    '15m': { days: 0.25, interval: '5m' },
-                    '30m': { days: 0.5, interval: '5m' },
-                    '1h': { days: 1, interval: 'hourly' },
-                    '4h': { days: 4, interval: 'hourly' }
-                };
-                
-                const params = timeframeMap[timeframe] || timeframeMap['1h'];
-                const response = await fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=${params.days}&interval=${params.interval}`);
+                const response = await fetch(`/api/btc/history?timeframe=${timeframe}`);
                 const data = await response.json();
                 
-                if (data.prices) {
-                    priceHistory = data.prices.map(([timestamp, price]) => ({
-                        time: new Date(timestamp),
-                        price: price
+                if (data.success && data.data) {
+                    priceHistory = data.data.map(item => ({
+                        time: new Date(item.timestamp),
+                        price: item.price,
+                        high: item.high,
+                        low: item.low,
+                        volume: item.volume
                     }));
                     
-                    // Calculate high and low for the timeframe
-                    const prices = data.prices.map(p => p[1]);
-                    const high = Math.max(...prices);
-                    const low = Math.min(...prices);
-                    
-                    document.getElementById('priceHigh').textContent = `$${high.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                    document.getElementById('priceLow').textContent = `$${low.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                    
-                    console.log(`BTC History Updated: ${priceHistory.length} data points for ${timeframe}`);
+                    console.log(`BTC History Updated: ${priceHistory.length} data points for ${timeframe} (Source: ${data.source})`);
+                } else {
+                    throw new Error(data.error || 'Failed to fetch historical data');
                 }
             } catch (error) {
                 console.error('Error fetching BTC history:', error);

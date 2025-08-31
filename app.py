@@ -337,6 +337,121 @@ def phantom_sign():
             'error': str(e)
         }), 500
 
+@app.route('/api/btc/price')
+def btc_price():
+    """Get current BTC price via backend proxy"""
+    try:
+        # Use CoinAPI.io free tier (no auth required for basic endpoints)
+        response = requests.get('https://rest.coinapi.io/v1/exchangerate/BTC/USD', timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            return jsonify({
+                'success': True,
+                'price': data.get('rate', 0),
+                'last_updated': data.get('time', ''),
+                'source': 'coinapi'
+            })
+        else:
+            # Fallback to CryptoCompare API
+            fallback_response = requests.get('https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD', timeout=10)
+            if fallback_response.status_code == 200:
+                fallback_data = fallback_response.json()
+                return jsonify({
+                    'success': True,
+                    'price': fallback_data.get('USD', 0),
+                    'source': 'cryptocompare'
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Failed to fetch price data'}), 500
+                
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/btc/history')
+def btc_history():
+    """Get BTC price history via backend proxy"""
+    try:
+        timeframe = request.args.get('timeframe', '1h')
+        
+        # Map timeframes to hours
+        timeframe_hours = {
+            '15m': 1,
+            '30m': 2, 
+            '1h': 24,
+            '4h': 96
+        }
+        
+        hours = timeframe_hours.get(timeframe, 24)
+        
+        # Use CryptoCompare API for historical data (free, no auth required)
+        url = f'https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USD&limit={hours}&aggregate=1'
+        response = requests.get(url, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('Response') == 'Success':
+                history_data = data['Data']['Data']
+                
+                # Format data for frontend
+                formatted_data = []
+                for item in history_data:
+                    formatted_data.append({
+                        'timestamp': item['time'] * 1000,  # Convert to milliseconds
+                        'price': item['close'],
+                        'high': item['high'],
+                        'low': item['low'],
+                        'volume': item['volumeto']
+                    })
+                
+                return jsonify({
+                    'success': True,
+                    'data': formatted_data,
+                    'timeframe': timeframe,
+                    'source': 'cryptocompare'
+                })
+            else:
+                return jsonify({'success': False, 'error': 'Invalid API response'}), 500
+        else:
+            return jsonify({'success': False, 'error': 'Failed to fetch historical data'}), 500
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/btc/stats')
+def btc_stats():
+    """Get BTC statistics (24h high, low, change)"""
+    try:
+        # Get 24h data from CryptoCompare
+        url = 'https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC&tsyms=USD'
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            btc_data = data.get('DISPLAY', {}).get('BTC', {}).get('USD', {})
+            raw_data = data.get('RAW', {}).get('BTC', {}).get('USD', {})
+            
+            return jsonify({
+                'success': True,
+                'current_price': raw_data.get('PRICE', 0),
+                'change_24h': raw_data.get('CHANGEPCT24HOUR', 0),
+                'high_24h': raw_data.get('HIGH24HOUR', 0),
+                'low_24h': raw_data.get('LOW24HOUR', 0),
+                'volume_24h': raw_data.get('VOLUME24HOURTO', 0),
+                'formatted': {
+                    'price': btc_data.get('PRICE', '$0'),
+                    'change': btc_data.get('CHANGEPCT24HOUR', '0%'),
+                    'high': btc_data.get('HIGH24HOUR', '$0'),
+                    'low': btc_data.get('LOW24HOUR', '$0')
+                },
+                'source': 'cryptocompare'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Failed to fetch stats'}), 500
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
