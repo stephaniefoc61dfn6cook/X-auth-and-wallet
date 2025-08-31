@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crystal Play Gate - X Connect & Phantom Wallet</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -163,22 +164,39 @@
 
                 <!-- BTC Price Card -->
                 <div class="glass-effect rounded-2xl p-6 mb-8 card-hover-glow">
-                    <h2 class="text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
-                        BTC Price Prediction
-                    </h2>
-                    <div class="flex items-center justify-between">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                            BTC Live Price
+                        </h2>
+                        <div class="flex items-center gap-2">
+                            <div id="priceStatus" class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                            <span class="text-xs text-muted-foreground">Live</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Price Stats -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                         <div class="text-center">
                             <div class="text-sm text-muted-foreground">Current Price</div>
-                            <div class="text-3xl font-bold text-gaming-accent">$44,950</div>
+                            <div id="currentPrice" class="text-3xl font-bold text-gaming-accent">Loading...</div>
                         </div>
                         <div class="text-center">
                             <div class="text-sm text-muted-foreground">24h Change</div>
-                            <div class="text-xl font-semibold text-green-400">+2.4%</div>
+                            <div id="priceChange" class="text-xl font-semibold">Loading...</div>
                         </div>
                         <div class="text-center">
-                            <div class="text-sm text-muted-foreground">Volume</div>
-                            <div class="text-xl font-semibold">$2.8B</div>
+                            <div class="text-sm text-muted-foreground">24h High</div>
+                            <div id="priceHigh" class="text-xl font-semibold text-gaming-primary">Loading...</div>
                         </div>
+                        <div class="text-center">
+                            <div class="text-sm text-muted-foreground">24h Low</div>
+                            <div id="priceLow" class="text-xl font-semibold text-gaming-secondary">Loading...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Chart Container -->
+                    <div class="bg-background/50 rounded-xl p-4">
+                        <canvas id="btcChart" width="400" height="200"></canvas>
                     </div>
                 </div>
 
@@ -297,12 +315,184 @@
     </div>
 
     <script>
+        // Global variables for BTC data
+        let btcChart;
+        let currentBTCPrice = 0;
+        let priceHistory = [];
+
         // Close welcome modal and show dashboard
         function closeWelcomeModal() {
             document.getElementById('welcomeModal').style.display = 'none';
             document.getElementById('mainDashboard').classList.remove('hidden');
             checkAuthStatus();
             checkPhantomStatus();
+            initializeBTCData();
+        }
+
+        // Initialize BTC price data and chart
+        async function initializeBTCData() {
+            await fetchBTCPrice();
+            await fetchBTCHistory();
+            createBTCChart();
+            
+            // Update price every 30 seconds
+            setInterval(fetchBTCPrice, 30000);
+            // Update chart every 5 minutes
+            setInterval(() => {
+                fetchBTCHistory();
+                updateChart();
+            }, 300000);
+        }
+
+        // Fetch current BTC price from CoinGecko API
+        async function fetchBTCPrice() {
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true');
+                const data = await response.json();
+                
+                if (data.bitcoin) {
+                    const price = data.bitcoin.usd;
+                    const change = data.bitcoin.usd_24h_change;
+                    
+                    currentBTCPrice = price;
+                    
+                    // Update price display
+                    document.getElementById('currentPrice').textContent = `$${price.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    
+                    // Update 24h change with color
+                    const changeElement = document.getElementById('priceChange');
+                    const changeText = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                    changeElement.textContent = changeText;
+                    changeElement.className = `text-xl font-semibold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+                    
+                    // Update status indicator
+                    document.getElementById('priceStatus').className = 'w-2 h-2 bg-green-400 rounded-full animate-pulse';
+                    
+                    console.log(`BTC Price Updated: $${price}`);
+                }
+            } catch (error) {
+                console.error('Error fetching BTC price:', error);
+                document.getElementById('priceStatus').className = 'w-2 h-2 bg-red-400 rounded-full';
+                document.getElementById('currentPrice').textContent = 'Error loading';
+            }
+        }
+
+        // Fetch BTC price history for chart
+        async function fetchBTCHistory() {
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1&interval=hourly');
+                const data = await response.json();
+                
+                if (data.prices) {
+                    priceHistory = data.prices.map(([timestamp, price]) => ({
+                        time: new Date(timestamp),
+                        price: price
+                    }));
+                    
+                    // Calculate 24h high and low
+                    const prices = data.prices.map(p => p[1]);
+                    const high = Math.max(...prices);
+                    const low = Math.min(...prices);
+                    
+                    document.getElementById('priceHigh').textContent = `$${high.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    document.getElementById('priceLow').textContent = `$${low.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                    
+                    console.log(`BTC History Updated: ${priceHistory.length} data points`);
+                }
+            } catch (error) {
+                console.error('Error fetching BTC history:', error);
+            }
+        }
+
+        // Create BTC price chart
+        function createBTCChart() {
+            const ctx = document.getElementById('btcChart').getContext('2d');
+            
+            btcChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: priceHistory.map(p => p.time.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'})),
+                    datasets: [{
+                        label: 'BTC Price (USD)',
+                        data: priceHistory.map(p => p.price),
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 6,
+                        pointHoverBackgroundColor: 'rgb(59, 130, 246)',
+                        pointHoverBorderColor: 'white',
+                        pointHoverBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: 'white',
+                            bodyColor: 'white',
+                            borderColor: 'rgb(59, 130, 246)',
+                            borderWidth: 1,
+                            callbacks: {
+                                label: function(context) {
+                                    return `$${context.parsed.y.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                maxTicksLimit: 6
+                            }
+                        },
+                        y: {
+                            display: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+                                }
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    },
+                    animation: {
+                        duration: 750,
+                        easing: 'easeInOutQuart'
+                    }
+                }
+            });
+        }
+
+        // Update chart with new data
+        function updateChart() {
+            if (btcChart && priceHistory.length > 0) {
+                btcChart.data.labels = priceHistory.map(p => p.time.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}));
+                btcChart.data.datasets[0].data = priceHistory.map(p => p.price);
+                btcChart.update('none'); // No animation for updates
+            }
         }
 
         // X OAuth Functions
@@ -616,7 +806,10 @@
         function startGame(gameMode) {
             const statusDiv = document.getElementById('status');
             statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
-            statusDiv.textContent = `Starting ${gameMode}... Please connect your wallet and X account to continue!`;
+            
+            // Show current BTC price in the message
+            const priceText = currentBTCPrice > 0 ? ` Current BTC: $${currentBTCPrice.toLocaleString('en-US', {maximumFractionDigits: 2})}` : '';
+            statusDiv.textContent = `Starting ${gameMode}...${priceText} Please connect your wallet and X account to continue!`;
             
             // Check if user has authentication
             checkAuthenticationForGame(gameMode);
@@ -636,11 +829,12 @@
                 
                 if (xData.authenticated && phantomData.connected) {
                     statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
-                    statusDiv.textContent = `🎮 Ready to play ${gameMode}! All authentication complete.`;
+                    const priceText = currentBTCPrice > 0 ? ` BTC: $${currentBTCPrice.toLocaleString('en-US', {maximumFractionDigits: 2})}` : '';
+                    statusDiv.textContent = `🎮 Ready to play ${gameMode}! All authentication complete.${priceText}`;
                     
                     // Here you would normally start the actual game
                     setTimeout(() => {
-                        statusDiv.textContent = `🚀 Launching ${gameMode}... (Game functionality coming soon!)`;
+                        statusDiv.textContent = `🚀 Launching ${gameMode} with live BTC data... (Game functionality coming soon!)`;
                     }, 2000);
                     
                 } else if (!xData.authenticated && !phantomData.connected) {
