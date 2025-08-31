@@ -69,6 +69,13 @@
         .gaming-glow {
             box-shadow: 0 0 30px rgba(59, 130, 246, 0.3);
         }
+        .card-hover-glow {
+            transition: all 0.3s ease;
+        }
+        .card-hover-glow:hover {
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.6), 0 0 80px rgba(59, 130, 246, 0.3);
+            transform: translateY(-5px);
+        }
         .phantom-glow {
             box-shadow: 0 0 30px rgba(153, 69, 255, 0.3);
         }
@@ -106,12 +113,7 @@
         <div class="flex">
             <!-- Main Content -->
             <div class="flex-1 p-6">
-                <!-- Navigation -->
-                <div class="mb-4 text-center">
-                    <a href="/" class="text-blue-400 hover:text-blue-300 transition-colors underline">
-                        ← Back to Simple Interface
-                    </a>
-                </div>
+
 
                 <!-- Header with Auth Buttons -->
                 <header class="flex items-center justify-between mb-8">
@@ -160,7 +162,7 @@
                 <div id="status" class="mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center"></div>
 
                 <!-- BTC Price Card -->
-                <div class="glass-effect rounded-2xl p-6 mb-8 gaming-glow">
+                <div class="glass-effect rounded-2xl p-6 mb-8 card-hover-glow">
                     <h2 class="text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
                         BTC Price Prediction
                     </h2>
@@ -182,28 +184,31 @@
 
                 <!-- Game Modes -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                    <div class="glass-effect rounded-2xl p-6 hover:gaming-glow transition-all duration-300 cursor-pointer group">
+                    <div class="glass-effect rounded-2xl p-6 card-hover-glow cursor-pointer group">
                         <div class="text-4xl mb-4">🏆</div>
                         <h3 class="text-xl font-bold mb-2 group-hover:text-gaming-primary transition-colors">PVP Ranked</h3>
-                        <p class="text-muted-foreground">Competitive matches with ranking system</p>
-                        <div class="mt-4 px-4 py-2 bg-gradient-primary rounded-lg text-center text-primary-foreground font-semibold">
-                            Featured
-                        </div>
+                        <p class="text-muted-foreground mb-4">Competitive matches with ranking system</p>
+                        <button onclick="startGame('PVP Ranked')" class="w-full mt-4 px-4 py-2 bg-gradient-primary hover:opacity-90 transition-opacity rounded-lg text-center text-primary-foreground font-semibold">
+                            Play Now
+                        </button>
                     </div>
                     
-                    <div class="glass-effect rounded-2xl p-6 hover:gaming-glow transition-all duration-300 cursor-pointer group">
+                    <div class="glass-effect rounded-2xl p-6 card-hover-glow cursor-pointer group">
                         <div class="text-4xl mb-4">🎮</div>
                         <h3 class="text-xl font-bold mb-2 group-hover:text-gaming-primary transition-colors">Custom Lobby</h3>
-                        <p class="text-muted-foreground">Create or join custom game rooms</p>
+                        <p class="text-muted-foreground mb-4">Create or join custom game rooms</p>
+                        <button onclick="startGame('Custom Lobby')" class="w-full mt-4 px-4 py-2 bg-gradient-primary hover:opacity-90 transition-opacity rounded-lg text-center text-primary-foreground font-semibold">
+                            Play Now
+                        </button>
                     </div>
                     
-                    <div class="glass-effect rounded-2xl p-6 hover:gaming-glow transition-all duration-300 cursor-pointer group">
+                    <div class="glass-effect rounded-2xl p-6 card-hover-glow cursor-pointer group">
                         <div class="text-4xl mb-4">⚔️</div>
                         <h3 class="text-xl font-bold mb-2 group-hover:text-gaming-primary transition-colors">Battle Royale</h3>
-                        <p class="text-muted-foreground">Last player standing wins all</p>
-                        <div class="mt-4 px-4 py-2 bg-gradient-gaming rounded-lg text-center text-primary-foreground font-semibold">
-                            Featured
-                        </div>
+                        <p class="text-muted-foreground mb-4">Last player standing wins all</p>
+                        <button onclick="startGame('Battle Royale')" class="w-full mt-4 px-4 py-2 bg-gradient-gaming hover:opacity-90 transition-opacity rounded-lg text-center text-primary-foreground font-semibold">
+                            Play Now
+                        </button>
                     </div>
                 </div>
 
@@ -604,6 +609,56 @@
                 }
             } catch (error) {
                 console.error('Phantom status check error:', error);
+            }
+        }
+
+        // Game Mode Functions
+        function startGame(gameMode) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
+            statusDiv.textContent = `Starting ${gameMode}... Please connect your wallet and X account to continue!`;
+            
+            // Check if user has authentication
+            checkAuthenticationForGame(gameMode);
+        }
+
+        async function checkAuthenticationForGame(gameMode) {
+            try {
+                // Check X auth
+                const xResponse = await fetch('/auth/status', { credentials: 'include' });
+                const xData = await xResponse.json();
+                
+                // Check Phantom auth
+                const phantomResponse = await fetch('/auth/phantom/status', { credentials: 'include' });
+                const phantomData = await phantomResponse.json();
+                
+                const statusDiv = document.getElementById('status');
+                
+                if (xData.authenticated && phantomData.connected) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                    statusDiv.textContent = `🎮 Ready to play ${gameMode}! All authentication complete.`;
+                    
+                    // Here you would normally start the actual game
+                    setTimeout(() => {
+                        statusDiv.textContent = `🚀 Launching ${gameMode}... (Game functionality coming soon!)`;
+                    }, 2000);
+                    
+                } else if (!xData.authenticated && !phantomData.connected) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-orange-900/20 border border-orange-500/30 text-orange-300';
+                    statusDiv.textContent = '⚠️ Please connect both X account and Phantom wallet to play!';
+                } else if (!xData.authenticated) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-orange-900/20 border border-orange-500/30 text-orange-300';
+                    statusDiv.textContent = '⚠️ Please connect your X account to continue!';
+                } else if (!phantomData.connected) {
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-orange-900/20 border border-orange-500/30 text-orange-300';
+                    statusDiv.textContent = '⚠️ Please connect your Phantom wallet to continue!';
+                }
+                
+            } catch (error) {
+                console.error('Auth check error:', error);
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = 'Error checking authentication. Please try again.';
             }
         }
     </script>
