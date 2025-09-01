@@ -1,0 +1,10 @@
+[33mabe5682[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Fix Phantom wallet connection error - improve error handling and reliability
+[33m3c0e2a1[m Fix PvPDatabase initialization error - add proper script loading sequence
+[33m3afb82e[m Remove simulated matchmaking in PVP ranked - implement real authenticated user matching
+[33m3018fb1[m  Configure Supabase for Production Deployment on Render
+[33mac80cdd[m  Add Complete Supabase Database Integration for PvP System
+[33ma0e9a66[m  Implement Complete PvP BTC Prediction Battle System
+[33mcff251c[m Replace rate-limited APIs with completely free alternatives (CoinGecko, Coinbase, Blockchain.info)
+[33m0532390[m Add comprehensive debugging and error handling to backend API endpoints
+[33mf58e555[m Fix CORS issues by implementing backend API proxy with CryptoCompare API
+[33m950b287[m Fix BTC chart loading errors with comprehensive debugging and error handling

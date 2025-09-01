@@ -39,6 +39,32 @@ def generate_code_challenge(verifier):
     digest = hashlib.sha256(verifier.encode('utf-8')).digest()
     return base64.urlsafe_b64encode(digest).decode('utf-8').rstrip('=')
 
+@app.route('/supabase_config.js')
+def supabase_config():
+    """Serve the Supabase configuration file with environment variables injected"""
+    try:
+        with open('supabase_config.js', 'r', encoding='utf-8') as f:
+            js_content = f.read()
+            
+        # Inject environment variables into the JavaScript
+        js_content = js_content.replace(
+            'window.SUPABASE_URL || \'https://ziuxjkxenfbqgbmslczv.supabase.co\'',
+            f'"{SUPABASE_URL}"'
+        ).replace(
+            'window.SUPABASE_ANON_KEY || \'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2OTEzMjAsImV4cCI6MjA3MjI2NzMyMH0.Dk0FBPW8U78Pjjtdlkm9jwP_I8_f1x8mrOBVAhMQQ6M\'',
+            f'"{SUPABASE_ANON_KEY}"'
+        ).replace(
+            'window.SUPABASE_SERVICE_KEY || \'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjY5MTMyMCwiZXhwIjoyMDcyMjY3MzIwfQ.gdG6hNXFzeHqqoazx2o6qOS1uk3cQn87MWlET-_XBhM\'',
+            f'"{SUPABASE_SERVICE_KEY}"'
+        )
+        
+        # Return as JavaScript file
+        from flask import Response
+        return Response(js_content, mimetype='application/javascript')
+        
+    except FileNotFoundError:
+        return "Supabase configuration file not found", 404
+
 @app.route('/')
 def index():
     """Serve the gaming interface as default with injected environment variables"""
@@ -639,7 +665,10 @@ def health():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'service': 'X OAuth & Phantom Wallet Backend'
+        'service': 'X OAuth & Phantom Wallet Backend',
+        'timestamp': datetime.now().isoformat(),
+        'supabase_url': SUPABASE_URL[:50] + '...',  # Show partial URL for verification
+        'has_supabase_config': os.path.exists('supabase_config.js')
     })
 
 if __name__ == '__main__':
