@@ -1530,6 +1530,80 @@ def get_battle_status(battle_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/battles/pending', methods=['GET'])
+def get_pending_battles():
+    """Get pending battle invitations for the current user"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        # Get user ID from session
+        user_id = user_info.get('db_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User database ID not found'
+            }), 400
+        
+        print(f"[PENDING_BATTLES] Checking pending battles for user {user_id}")
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get battles where user is involved and status is pending_acceptance
+        battles_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/battles?or=(user1_id.eq.{user_id},user2_id.eq.{user_id})&status=eq.pending_acceptance&select=*,user1:users!battles_user1_id_fkey(*),user2:users!battles_user2_id_fkey(*),user1_prediction:predictions!battles_user1_prediction_id_fkey(*),user2_prediction:predictions!battles_user2_prediction_id_fkey(*)',
+            headers=headers
+        )
+        
+        print(f"[PENDING_BATTLES] Query status: {battles_response.status_code}")
+        print(f"[PENDING_BATTLES] Query response: {battles_response.text}")
+        
+        if battles_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get pending battles: {battles_response.text}'
+            }), 500
+        
+        battles = battles_response.json()
+        
+        # Filter battles where user hasn't accepted yet
+        pending_battles = []
+        for battle in battles:
+            is_user1 = battle['user1_id'] == user_id
+            is_user2 = battle['user2_id'] == user_id
+            
+            if is_user1 and not battle['user1_accepted']:
+                pending_battles.append(battle)
+            elif is_user2 and not battle['user2_accepted']:
+                pending_battles.append(battle)
+        
+        print(f"[PENDING_BATTLES] Found {len(pending_battles)} pending battles for user {user_id}")
+        
+        return jsonify({
+            'success': True,
+            'pending_battles': pending_battles,
+            'count': len(pending_battles)
+        })
+        
+    except Exception as e:
+        print(f"[PENDING_BATTLES] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/health')
 def health():
     """Health check endpoint"""

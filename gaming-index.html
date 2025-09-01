@@ -1708,13 +1708,29 @@
                     
                     handleMatchFound(queueEntry, battleResult.battle);
                 } else {
-                    // No match found, continue waiting
-                    const statusDiv = document.getElementById('status');
-                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
-                    statusDiv.textContent = `🔍 Searching for real opponents... You'll be matched with another player soon.`;
+                    // No immediate match found, check for existing pending battles first
+                    const pendingResponse = await fetch('/api/battles/pending', {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
                     
-                    // Poll for matches every 10 seconds
-                    startMatchPolling(queueEntry);
+                    const pendingResult = await pendingResponse.json();
+                    console.log('🔍 [MATCHMAKING] Initial pending battles check:', pendingResult);
+                    
+                    if (pendingResult.success && pendingResult.count > 0) {
+                        // User has pending battle invitations!
+                        const battle = pendingResult.pending_battles[0];
+                        console.log('🔔 [MATCHMAKING] Found existing pending battle:', battle.id);
+                        handleMatchFound(queueEntry, battle);
+                    } else {
+                        // No pending battles, start searching
+                        const statusDiv = document.getElementById('status');
+                        statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
+                        statusDiv.textContent = `🔍 Searching for real opponents... You'll be matched with another player soon.`;
+                        
+                        // Start polling for matches
+                        startMatchPolling(queueEntry);
+                    }
                 }
                 
             } catch (error) {
@@ -1734,7 +1750,25 @@
                         return;
                     }
                     
-                    // Try to find a match using backend API
+                    // First, check for pending battle invitations
+                    const pendingResponse = await fetch('/api/battles/pending', {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
+                    
+                    const pendingResult = await pendingResponse.json();
+                    console.log('🔄 [POLLING] Pending battles check:', pendingResult);
+                    
+                    if (pendingResult.success && pendingResult.count > 0) {
+                        // Found a pending battle invitation!
+                        clearInterval(pollInterval);
+                        const battle = pendingResult.pending_battles[0]; // Take the first one
+                        console.log('🔔 [POLLING] Found pending battle invitation:', battle.id);
+                        handleMatchFound(queueEntry, battle);
+                        return;
+                    }
+                    
+                    // If no pending battles, try to find a new match
                     const matchResponse = await fetch('/api/matchmaking/find', {
                         method: 'POST',
                         headers: {
@@ -1747,7 +1781,7 @@
                     });
                     
                     const matchResult = await matchResponse.json();
-                    console.log('🔄 [POLLING] Match check result:', matchResult);
+                    console.log('🔄 [POLLING] New match check result:', matchResult);
                     
                     if (matchResult.success && matchResult.match_found) {
                         clearInterval(pollInterval);
@@ -1767,7 +1801,7 @@
                     console.error('Match polling error:', error);
                     clearInterval(pollInterval);
                 }
-            }, 10000); // Poll every 10 seconds
+            }, 5000); // Poll every 5 seconds (increased frequency for better responsiveness)
         }
 
         async function handleMatchFound(queueEntry, battle) {
