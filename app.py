@@ -8,6 +8,7 @@ import hashlib
 from urllib.parse import urlencode, parse_qs
 import json
 from datetime import datetime
+import uuid
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'your-secret-key-change-in-production')
@@ -24,6 +25,52 @@ X_REDIRECT_URI = os.environ.get('X_REDIRECT_URI', 'http://localhost:5000/auth/x/
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://ziuxjkxenfbqgbmslczv.supabase.co')
 SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2OTEzMjAsImV4cCI6MjA3MjI2NzMyMH0.Dk0FBPW8U78Pjjtdlkm9jwP_I8_f1x8mrOBVAhMQQ6M')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjY5MTMyMCwiZXhwIjoyMDcyMjY3MzIwfQ.gdG6hNXFzeHqqoazx2o6qOS1uk3cQn87MWlET-_XBhM')
+
+# Helper function to create/update user in Supabase
+def create_or_update_user_in_db(user_data):
+    """Create or update user in Supabase database"""
+    try:
+        # Use service key for backend operations
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+        }
+        
+        # Prepare user data for database
+        db_user_data = {
+            'id': user_data.get('id'),
+            'username': user_data.get('username'),
+            'x_username': user_data.get('x_username'),
+            'phantom_address': user_data.get('phantom_address')
+        }
+        
+        # Remove None values
+        db_user_data = {k: v for k, v in db_user_data.items() if v is not None}
+        
+        # Use upsert with on_conflict parameter for PostgreSQL UPSERT
+        headers['Prefer'] = 'resolution=merge-duplicates,return=representation'
+        
+        # Upsert user (insert or update if exists)
+        response = requests.post(
+            f'{SUPABASE_URL}/rest/v1/users',
+            headers=headers,
+            json=db_user_data
+        )
+        
+        print(f"[USER_CREATE] Status: {response.status_code}")
+        print(f"[USER_CREATE] Response: {response.text}")
+        
+        if response.status_code in [200, 201]:
+            return response.json()
+        else:
+            print(f"[USER_CREATE] Error creating user: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"[USER_CREATE] Exception: {str(e)}")
+        return None
 
 # X OAuth 2.0 endpoints
 X_AUTHORIZE_URL = 'https://twitter.com/i/oauth2/authorize'
@@ -206,6 +253,23 @@ def x_callback():
             user_data = user_response.json()
             user_info = user_data.get('data', {})
             
+            # Create/update user in Supabase database
+            db_user_data = {
+                'id': str(uuid.uuid4()),  # Generate new UUID for database
+                'username': user_info.get('username', ''),
+                'x_username': user_info.get('username', ''),
+                'phantom_address': None  # Will be set when Phantom connects
+            }
+            
+            # Create user in database
+            db_user = create_or_update_user_in_db(db_user_data)
+            if db_user:
+                print(f"[X_AUTH] User created/updated in database: {db_user}")
+                # Store database user ID in session
+                user_info['db_id'] = db_user[0]['id'] if isinstance(db_user, list) and db_user else db_user.get('id')
+            else:
+                print(f"[X_AUTH] Failed to create user in database")
+            
             # Store user info in session
             session['user_info'] = user_info
             session['access_token'] = access_token
@@ -256,11 +320,26 @@ def x_callback():
 def auth_status():
     """Check authentication status"""
     user_info = session.get('user_info')
-    if user_info:
-        return jsonify({
+    phantom_wallet = session.get('phantom_wallet')
+    
+    if user_info or phantom_wallet:
+        # Ensure we have database user ID
+        db_id = user_info.get('db_id') if user_info else None
+        
+        response_data = {
             'authenticated': True,
-            'user': user_info
-        })
+            'user': {
+                'id': db_id,  # Database user ID for PvP system
+                'username': user_info.get('username', f"phantom_user_{phantom_wallet.get('publicKey', '')[:8]}") if user_info else f"phantom_user_{phantom_wallet.get('publicKey', '')[:8]}",
+                'x_username': user_info.get('username') if user_info else None,
+                'phantom_address': user_info.get('phantom_address') or (phantom_wallet.get('publicKey') if phantom_wallet else None),
+                'has_x': bool(user_info),
+                'has_phantom': bool(phantom_wallet)
+            }
+        }
+        
+        print(f"[AUTH_STATUS] Returning user data: {response_data}")
+        return jsonify(response_data)
     else:
         return jsonify({
             'authenticated': False
@@ -287,6 +366,39 @@ def phantom_connect():
                 'success': False,
                 'error': 'No public key provided'
             }), 400
+        
+        # Check if user already exists (from X auth) or create new one
+        user_info = session.get('user_info', {})
+        
+        if user_info and user_info.get('db_id'):
+            # User exists from X auth, update with Phantom address
+            db_user_data = {
+                'id': user_info['db_id'],
+                'phantom_address': public_key
+            }
+            print(f"[PHANTOM] Updating existing user {user_info['db_id']} with Phantom address")
+        else:
+            # Create new user with just Phantom wallet
+            db_user_data = {
+                'id': str(uuid.uuid4()),
+                'username': f'phantom_user_{public_key[:8]}',  # Generate username from public key
+                'x_username': None,
+                'phantom_address': public_key
+            }
+            print(f"[PHANTOM] Creating new user with Phantom address")
+        
+        # Create/update user in database
+        db_user = create_or_update_user_in_db(db_user_data)
+        if db_user:
+            print(f"[PHANTOM] User created/updated in database: {db_user}")
+            # Update session with database user ID
+            if not user_info:
+                user_info = {}
+            user_info['db_id'] = db_user[0]['id'] if isinstance(db_user, list) and db_user else db_user.get('id')
+            user_info['phantom_address'] = public_key
+            session['user_info'] = user_info
+        else:
+            print(f"[PHANTOM] Failed to create/update user in database")
         
         # Store wallet info in session
         session['phantom_wallet'] = {
