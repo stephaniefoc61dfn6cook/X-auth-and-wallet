@@ -1588,6 +1588,12 @@
                 // Update current user info
                 currentUser = xData.user;
                 
+                // Ensure PvPDatabase has the current user
+                if (pvpDB) {
+                    pvpDB.currentUser = currentUser;
+                    console.log('🔗 [QUEUE_ENTRY] Updated currentUser in PvPDatabase:', currentUser);
+                }
+                
             } catch (error) {
                 console.error('Authentication check failed:', error);
                 alert('❌ Failed to verify authentication. Please try again.');
@@ -1628,6 +1634,13 @@
                 }
 
                 // Create prediction in database
+                console.log('🔍 [MATCHMAKING] Current user data:', currentUser);
+                console.log('🔍 [MATCHMAKING] PvP DB current user:', pvpDB.currentUser);
+                
+                if (!currentUser || !currentUser.id) {
+                    throw new Error('Current user or user ID is missing');
+                }
+                
                 const predictionData = {
                     user_id: currentUser.id,
                     predicted_price: queueEntry.price,
@@ -1635,7 +1648,8 @@
                     bet_amount: queueEntry.betAmount,
                     current_btc_price: currentBTCPrice
                 };
-
+                
+                console.log('📝 [MATCHMAKING] Creating prediction with data:', predictionData);
                 const predictionId = await pvpDB.createPrediction(predictionData);
                 queueEntry.predictionId = predictionId;
                 
@@ -1990,6 +2004,13 @@
                 
                 if (xData.authenticated) {
                     currentUser = xData.user;
+                    
+                    // Set the currentUser in the PvPDatabase instance
+                    if (pvpDB) {
+                        pvpDB.currentUser = currentUser;
+                        console.log('🔗 [PVP_INIT] Set currentUser in PvPDatabase:', currentUser);
+                    }
+                    
                     console.log('✅ PvP system initialized for user:', currentUser.username);
                 } else {
                     console.log('ℹ️ User not authenticated for PvP system');

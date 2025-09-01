@@ -114,26 +114,40 @@ class PvPDatabase {
 
     async createPrediction(predictionData) {
         try {
+            console.log('🔍 [DB] Creating prediction with data:', predictionData);
+            console.log('🔍 [DB] this.currentUser:', this.currentUser);
+            
+            // Use user_id from predictionData instead of this.currentUser
+            if (!predictionData.user_id) {
+                throw new Error('user_id is required in predictionData');
+            }
+            
+            const insertData = {
+                user_id: predictionData.user_id,
+                predicted_price: predictionData.predicted_price || predictionData.price,
+                direction: predictionData.direction,
+                bet_amount: predictionData.bet_amount || predictionData.betAmount,
+                current_btc_price: predictionData.current_btc_price || predictionData.currentBtcPrice
+            };
+            
+            console.log('📝 [DB] Inserting prediction data:', insertData);
+            
             const { data, error } = await this.client
                 .from('predictions')
-                .insert({
-                    user_id: this.currentUser.id,
-                    predicted_price: predictionData.price,
-                    direction: predictionData.direction,
-                    bet_amount: predictionData.betAmount,
-                    current_btc_price: predictionData.currentBtcPrice
-                })
+                .insert(insertData)
                 .select()
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error('❌ [DB] Prediction insert error:', error);
+                throw error;
+            }
             
-            // Try to find a match immediately
-            await this.findAndCreateMatch(data.id);
+            console.log('✅ [DB] Prediction created successfully:', data);
             
             return data;
         } catch (error) {
-            console.error('Error creating prediction:', error);
+            console.error('❌ [DB] Error creating prediction:', error);
             throw error;
         }
     }
