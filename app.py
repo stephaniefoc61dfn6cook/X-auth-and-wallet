@@ -5,7 +5,7 @@ import os
 import secrets
 import base64
 import hashlib
-from urllib.parse import urlencode, parse_qs
+from urllib.parse import urlencode, parse_qs, quote
 import json
 from datetime import datetime
 import uuid
@@ -36,12 +36,16 @@ def find_existing_user(x_username=None, phantom_address=None):
             'Content-Type': 'application/json'
         }
         
-        # Build query parameters
+        # Build query parameters with proper URL encoding
         query_params = []
         if x_username:
-            query_params.append(f'x_username=eq.{x_username}')
+            encoded_username = quote(str(x_username), safe='')
+            print(f"[USER_LOOKUP] X Username: '{x_username}' -> '{encoded_username}'")
+            query_params.append(f'x_username=eq.{encoded_username}')
         if phantom_address:
-            query_params.append(f'phantom_address=eq.{phantom_address}')
+            encoded_address = quote(str(phantom_address), safe='')
+            print(f"[USER_LOOKUP] Phantom Address: '{phantom_address}' -> '{encoded_address}'")
+            query_params.append(f'phantom_address=eq.{encoded_address}')
         
         if not query_params:
             return None
