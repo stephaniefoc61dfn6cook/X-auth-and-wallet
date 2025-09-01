@@ -20,6 +20,11 @@ X_CLIENT_ID = os.environ.get('X_CLIENT_ID', 'your-x-client-id')
 X_CLIENT_SECRET = os.environ.get('X_CLIENT_SECRET', 'your-x-client-secret')
 X_REDIRECT_URI = os.environ.get('X_REDIRECT_URI', 'http://localhost:5000/auth/x/callback')
 
+# Supabase configuration
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://ziuxjkxenfbqgbmslczv.supabase.co')
+SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2OTEzMjAsImV4cCI6MjA3MjI2NzMyMH0.Dk0FBPW8U78Pjjtdlkm9jwP_I8_f1x8mrOBVAhMQQ6M')
+SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjY5MTMyMCwiZXhwIjoyMDcyMjY3MzIwfQ.gdG6hNXFzeHqqoazx2o6qOS1uk3cQn87MWlET-_XBhM')
+
 # X OAuth 2.0 endpoints
 X_AUTHORIZE_URL = 'https://twitter.com/i/oauth2/authorize'
 X_TOKEN_URL = 'https://api.twitter.com/2/oauth2/token'
@@ -36,10 +41,26 @@ def generate_code_challenge(verifier):
 
 @app.route('/')
 def index():
-    """Serve the gaming interface as default"""
+    """Serve the gaming interface as default with injected environment variables"""
     try:
         with open('gaming-index.html', 'r', encoding='utf-8') as f:
-            return f.read()
+            html_content = f.read()
+            
+        # Inject Supabase environment variables into the HTML
+        supabase_script = f"""
+        <script>
+            // Inject Supabase configuration from server environment variables
+            window.SUPABASE_URL = '{SUPABASE_URL}';
+            window.SUPABASE_ANON_KEY = '{SUPABASE_ANON_KEY}';
+            window.SUPABASE_SERVICE_KEY = '{SUPABASE_SERVICE_KEY}';
+            console.log('🔧 Supabase config injected from server environment');
+        </script>
+        """
+        
+        # Insert the script before the closing head tag
+        html_content = html_content.replace('</head>', f'{supabase_script}</head>')
+        
+        return html_content
     except FileNotFoundError:
         return "gaming-index.html not found. Please make sure it exists in the project directory."
 

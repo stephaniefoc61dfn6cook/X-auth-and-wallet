@@ -2,11 +2,13 @@
 // SUPABASE CONFIGURATION AND CLIENT
 // ================================
 
-// Supabase configuration - Add these to your .env file
+// Supabase configuration - Uses environment variables in production
 const SUPABASE_CONFIG = {
-    url: process.env.SUPABASE_URL || 'https://your-project.supabase.co',
-    anonKey: process.env.SUPABASE_ANON_KEY || 'your-anon-key',
-    serviceKey: process.env.SUPABASE_SERVICE_KEY || 'your-service-key' // Only for server-side operations
+    // In production, these will be injected by the server
+    // In development, fallback to hardcoded values for testing
+    url: window.SUPABASE_URL || 'https://ziuxjkxenfbqgbmslczv.supabase.co',
+    anonKey: window.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2OTEzMjAsImV4cCI6MjA3MjI2NzMyMH0.Dk0FBPW8U78Pjjtdlkm9jwP_I8_f1x8mrOBVAhMQQ6M',
+    serviceKey: window.SUPABASE_SERVICE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjY5MTMyMCwiZXhwIjoyMDcyMjY3MzIwfQ.gdG6hNXFzeHqqoazx2o6qOS1uk3cQn87MWlET-_XBhM' // Only for server-side operations
 };
 
 // Initialize Supabase client (for frontend)
