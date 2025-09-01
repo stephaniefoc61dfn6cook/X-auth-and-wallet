@@ -881,6 +881,85 @@ def api_test():
         'timestamp': str(datetime.now()) if 'datetime' in globals() else 'unknown'
     })
 
+@app.route('/api/predictions', methods=['POST'])
+def create_prediction():
+    """Create a prediction in the database using service key to bypass RLS"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        # Get user ID from session
+        user_id = user_info.get('db_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User database ID not found'
+            }), 400
+        
+        # Get prediction data from request
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
+        
+        # Prepare prediction data
+        prediction_data = {
+            'user_id': user_id,
+            'predicted_price': data.get('predicted_price'),
+            'direction': data.get('direction'),
+            'bet_amount': data.get('bet_amount'),
+            'current_btc_price': data.get('current_btc_price')
+        }
+        
+        print(f"[PREDICTION_API] Creating prediction for user {user_id}: {prediction_data}")
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+        }
+        
+        # Insert prediction
+        response = requests.post(
+            f'{SUPABASE_URL}/rest/v1/predictions',
+            headers=headers,
+            json=prediction_data
+        )
+        
+        print(f"[PREDICTION_API] Status: {response.status_code}")
+        print(f"[PREDICTION_API] Response: {response.text}")
+        
+        if response.status_code in [200, 201]:
+            result = response.json()
+            prediction = result[0] if isinstance(result, list) and result else result
+            return jsonify({
+                'success': True,
+                'prediction': prediction
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Database error: {response.text}'
+            }), 500
+            
+    except Exception as e:
+        print(f"[PREDICTION_API] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/health')
 def health():
     """Health check endpoint"""

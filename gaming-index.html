@@ -1650,11 +1650,29 @@
                 };
                 
                 console.log('📝 [MATCHMAKING] Creating prediction with data:', predictionData);
-                const predictionId = await pvpDB.createPrediction(predictionData);
-                queueEntry.predictionId = predictionId;
+                
+                // Use backend API to create prediction (bypasses RLS)
+                const predictionResponse = await fetch('/api/predictions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(predictionData)
+                });
+                
+                const predictionResult = await predictionResponse.json();
+                console.log('📝 [MATCHMAKING] Prediction API response:', predictionResult);
+                
+                if (!predictionResult.success) {
+                    throw new Error(predictionResult.error || 'Failed to create prediction');
+                }
+                
+                const prediction = predictionResult.prediction;
+                queueEntry.predictionId = prediction.id;
                 
                 // Try to find a match immediately
-                const battleId = await pvpDB.findAndCreateMatch(predictionId);
+                const battleId = await pvpDB.findAndCreateMatch(prediction.id);
                 
                 if (battleId) {
                     // Match found! Get battle details
