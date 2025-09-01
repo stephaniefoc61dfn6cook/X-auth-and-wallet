@@ -265,11 +265,31 @@
                 <!-- Active Bets Section -->
                 <div class="glass-effect rounded-2xl p-6">
                     <h2 class="text-2xl font-bold mb-4 bg-gradient-primary bg-clip-text text-transparent">
-                        Active Bets
+                        Active Bets & Queue
                     </h2>
-                    <div class="text-center text-muted-foreground py-8">
-                        <div class="text-6xl mb-4">🎯</div>
-                        <p>No active bets yet. Start a game to begin!</p>
+                    
+                    <!-- Queue Section -->
+                    <div id="queueSection" class="mb-6">
+                        <h3 class="text-lg font-semibold mb-3 text-gaming-secondary">🎯 In Queue</h3>
+                        <div id="queueList" class="space-y-3">
+                            <!-- Queue items will be populated here -->
+                        </div>
+                        <div id="emptyQueue" class="text-center text-muted-foreground py-4">
+                            <div class="text-4xl mb-2">⏳</div>
+                            <p class="text-sm">No predictions in queue</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Active Battles Section -->
+                    <div id="activeBattlesSection">
+                        <h3 class="text-lg font-semibold mb-3 text-gaming-primary">⚔️ Active Battles</h3>
+                        <div id="activeBattlesList" class="space-y-3">
+                            <!-- Active battles will be populated here -->
+                        </div>
+                        <div id="emptyBattles" class="text-center text-muted-foreground py-4">
+                            <div class="text-4xl mb-2">🎮</div>
+                            <p class="text-sm">No active battles</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -350,6 +370,160 @@
                 </div>
                 <div class="flex-1 bg-background/50 rounded-xl overflow-hidden">
                     <div id="tradingview-widget" class="w-full h-full"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PvP Prediction Modal -->
+    <div id="pvpModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-card border border-border rounded-2xl w-full max-w-lg glass-effect animate-slide-up">
+            <div class="flex justify-between items-center p-6 border-b border-border">
+                <h2 class="text-2xl font-bold text-foreground">🎯 PvP BTC Prediction</h2>
+                <button onclick="closePvPModal()" class="text-muted-foreground hover:text-foreground transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-6">
+                <!-- Current BTC Price Display -->
+                <div class="text-center p-4 bg-secondary/50 rounded-xl">
+                    <div class="text-sm text-muted-foreground">Current BTC Price</div>
+                    <div class="text-2xl font-bold text-gaming-primary" id="pvpCurrentPrice">$0</div>
+                    <div class="text-xs text-muted-foreground">Battle ends in 4 hours</div>
+                </div>
+
+                <!-- Price Prediction Input -->
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-foreground">Your BTC Price Prediction (4 hours)</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground">$</span>
+                        <input type="number" 
+                               id="predictionPrice" 
+                               class="w-full pl-8 pr-4 py-3 bg-secondary border border-border rounded-lg text-foreground focus:ring-2 focus:ring-gaming-primary focus:border-transparent" 
+                               placeholder="Enter your prediction"
+                               min="1000"
+                               max="200000"
+                               step="1"
+                               oninput="updatePredictionSummary()">
+                    </div>
+                </div>
+
+                <!-- Direction Selection -->
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-foreground">Direction</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button type="button" 
+                                onclick="selectDirection('below')" 
+                                id="belowBtn"
+                                class="p-3 border border-border rounded-lg text-center hover:border-red-500 hover:bg-red-500/10 transition-all">
+                            <div class="text-red-500">📉 Below</div>
+                            <div class="text-xs text-muted-foreground">Price will be lower</div>
+                        </button>
+                        <button type="button" 
+                                onclick="selectDirection('above')" 
+                                id="aboveBtn"
+                                class="p-3 border border-border rounded-lg text-center hover:border-green-500 hover:bg-green-500/10 transition-all">
+                            <div class="text-green-500">📈 Above</div>
+                            <div class="text-xs text-muted-foreground">Price will be higher</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bet Amount Selection -->
+                <div class="space-y-2">
+                    <label class="block text-sm font-medium text-foreground">Bet Amount ($COIN)</label>
+                    <div class="grid grid-cols-3 gap-3">
+                        <button type="button" 
+                                onclick="selectBetAmount(10)" 
+                                id="bet10"
+                                class="p-3 border border-border rounded-lg text-center hover:border-gaming-primary hover:bg-gaming-primary/10 transition-all">
+                            <div class="font-bold text-gaming-primary">$10</div>
+                        </button>
+                        <button type="button" 
+                                onclick="selectBetAmount(50)" 
+                                id="bet50"
+                                class="p-3 border border-border rounded-lg text-center hover:border-gaming-primary hover:bg-gaming-primary/10 transition-all">
+                            <div class="font-bold text-gaming-primary">$50</div>
+                        </button>
+                        <button type="button" 
+                                onclick="selectBetAmount(100)" 
+                                id="bet100"
+                                class="p-3 border border-border rounded-lg text-center hover:border-gaming-primary hover:bg-gaming-primary/10 transition-all">
+                            <div class="font-bold text-gaming-primary">$100</div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Prediction Summary -->
+                <div id="predictionSummary" class="hidden p-4 bg-secondary/30 rounded-xl border border-gaming-primary/30">
+                    <div class="text-sm text-muted-foreground mb-2">Your Prediction:</div>
+                    <div id="summaryText" class="text-foreground font-medium"></div>
+                </div>
+
+                <!-- Enter Queue Button -->
+                <button onclick="enterQueue()" 
+                        id="enterQueueBtn"
+                        disabled
+                        class="w-full py-4 bg-gradient-primary hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all rounded-lg text-center text-primary-foreground font-bold text-lg">
+                    🚀 Enter Queue
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Battle Accept Modal (League of Legends Style) -->
+    <div id="battleAcceptModal" class="hidden fixed inset-0 bg-black/90 backdrop-blur-sm z-60 flex items-center justify-center">
+        <div class="relative">
+            <!-- Circular Timer Background -->
+            <div class="w-80 h-80 relative">
+                <!-- Timer Circle -->
+                <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    <!-- Background Circle -->
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+                    <!-- Timer Progress Circle -->
+                    <circle id="timerCircle" 
+                            cx="50" cy="50" r="45" 
+                            fill="none" 
+                            stroke="#3b82f6" 
+                            stroke-width="3" 
+                            stroke-linecap="round"
+                            stroke-dasharray="283" 
+                            stroke-dashoffset="0"
+                            class="transition-all duration-1000 ease-linear"/>
+                </svg>
+                
+                <!-- Modal Content -->
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <div class="bg-card border-2 border-gaming-primary rounded-2xl p-6 w-64 text-center glass-effect">
+                        <div class="text-2xl font-bold text-gaming-primary mb-2">⚔️ BATTLE FOUND!</div>
+                        <div id="battleTimer" class="text-3xl font-bold text-red-500 mb-4">60</div>
+                        
+                        <!-- Battle Info -->
+                        <div class="space-y-3 mb-6">
+                            <div class="bg-secondary/50 rounded-lg p-3">
+                                <div class="text-sm text-muted-foreground">Your Opponent</div>
+                                <div id="opponentInfo" class="font-medium text-foreground">@username</div>
+                            </div>
+                            <div class="bg-secondary/50 rounded-lg p-3">
+                                <div class="text-sm text-muted-foreground">Battle Details</div>
+                                <div id="battleDetails" class="font-medium text-foreground">$100 • 4 hours</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Accept/Decline Buttons -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <button onclick="declineBattle()" 
+                                    class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-medium transition-colors">
+                                ❌ Decline
+                            </button>
+                            <button onclick="acceptBattle()" 
+                                    class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-medium transition-colors">
+                                ✅ Accept
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1041,6 +1215,12 @@
 
         // Game Mode Functions
         function startGame(gameMode) {
+            if (gameMode === 'PVP Ranked') {
+                // Open PvP prediction modal
+                openPvPModal();
+                return;
+            }
+            
             const statusDiv = document.getElementById('status');
             statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
             
@@ -1092,6 +1272,380 @@
                 statusDiv.textContent = 'Error checking authentication. Please try again.';
             }
         }
+
+        // PvP System Variables
+        let pvpPrediction = {
+            price: 0,
+            direction: '',
+            betAmount: 0
+        };
+        let userQueue = [];
+        let activeBattles = [];
+        let battleAcceptTimer = null;
+        let currentBattleMatch = null;
+
+        // PvP Modal Functions
+        function openPvPModal() {
+            document.getElementById('pvpModal').classList.remove('hidden');
+            // Update current BTC price in modal
+            document.getElementById('pvpCurrentPrice').textContent = 
+                currentBTCPrice > 0 ? `$${currentBTCPrice.toLocaleString('en-US', {maximumFractionDigits: 2})}` : '$0';
+            
+            // Set default prediction price to current price
+            if (currentBTCPrice > 0) {
+                document.getElementById('predictionPrice').value = Math.round(currentBTCPrice);
+            }
+            
+            // Reset form
+            resetPvPForm();
+        }
+
+        function closePvPModal() {
+            document.getElementById('pvpModal').classList.add('hidden');
+            resetPvPForm();
+        }
+
+        function resetPvPForm() {
+            pvpPrediction = { price: 0, direction: '', betAmount: 0 };
+            
+            // Reset direction buttons
+            document.getElementById('belowBtn').classList.remove('border-red-500', 'bg-red-500/20');
+            document.getElementById('aboveBtn').classList.remove('border-green-500', 'bg-green-500/20');
+            
+            // Reset bet amount buttons
+            ['bet10', 'bet50', 'bet100'].forEach(id => {
+                document.getElementById(id).classList.remove('border-gaming-primary', 'bg-gaming-primary/20');
+            });
+            
+            // Hide summary and disable button
+            document.getElementById('predictionSummary').classList.add('hidden');
+            document.getElementById('enterQueueBtn').disabled = true;
+        }
+
+        function selectDirection(direction) {
+            pvpPrediction.direction = direction;
+            
+            // Reset both buttons
+            document.getElementById('belowBtn').classList.remove('border-red-500', 'bg-red-500/20');
+            document.getElementById('aboveBtn').classList.remove('border-green-500', 'bg-green-500/20');
+            
+            // Highlight selected button
+            if (direction === 'below') {
+                document.getElementById('belowBtn').classList.add('border-red-500', 'bg-red-500/20');
+            } else {
+                document.getElementById('aboveBtn').classList.add('border-green-500', 'bg-green-500/20');
+            }
+            
+            updatePredictionSummary();
+        }
+
+        function selectBetAmount(amount) {
+            pvpPrediction.betAmount = amount;
+            
+            // Reset all bet buttons
+            ['bet10', 'bet50', 'bet100'].forEach(id => {
+                document.getElementById(id).classList.remove('border-gaming-primary', 'bg-gaming-primary/20');
+            });
+            
+            // Highlight selected button
+            document.getElementById(`bet${amount}`).classList.add('border-gaming-primary', 'bg-gaming-primary/20');
+            
+            updatePredictionSummary();
+        }
+
+        function updatePredictionSummary() {
+            const price = parseFloat(document.getElementById('predictionPrice').value) || 0;
+            pvpPrediction.price = price;
+            
+            if (price > 0 && pvpPrediction.direction && pvpPrediction.betAmount > 0) {
+                const directionText = pvpPrediction.direction === 'below' ? '📉 Below' : '📈 Above';
+                const summaryText = `BTC ${directionText} $${price.toLocaleString()} for $${pvpPrediction.betAmount}`;
+                
+                document.getElementById('summaryText').textContent = summaryText;
+                document.getElementById('predictionSummary').classList.remove('hidden');
+                document.getElementById('enterQueueBtn').disabled = false;
+            } else {
+                document.getElementById('predictionSummary').classList.add('hidden');
+                document.getElementById('enterQueueBtn').disabled = true;
+            }
+        }
+
+        function enterQueue() {
+            if (!pvpPrediction.price || !pvpPrediction.direction || !pvpPrediction.betAmount) {
+                alert('Please complete all fields');
+                return;
+            }
+            
+            // Create queue entry
+            const queueEntry = {
+                id: Date.now(),
+                price: pvpPrediction.price,
+                direction: pvpPrediction.direction,
+                betAmount: pvpPrediction.betAmount,
+                timestamp: Date.now(),
+                status: 'searching'
+            };
+            
+            userQueue.push(queueEntry);
+            updateQueueDisplay();
+            closePvPModal();
+            
+            // Show success message
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+            statusDiv.textContent = `🎯 Entered queue! Searching for opponent with ${pvpPrediction.direction === 'below' ? 'above' : 'below'} prediction...`;
+            
+            // Start matchmaking simulation
+            setTimeout(() => simulateMatchmaking(queueEntry), Math.random() * 10000 + 5000); // 5-15 seconds
+        }
+
+        function simulateMatchmaking(queueEntry) {
+            // Check if still in queue
+            if (!userQueue.find(q => q.id === queueEntry.id)) return;
+            
+            // Create simulated opponent with opposite direction and similar price (within 0.5%)
+            const priceVariation = queueEntry.price * 0.005; // 0.5%
+            const opponentPrice = queueEntry.price + (Math.random() - 0.5) * priceVariation * 2;
+            const opponentDirection = queueEntry.direction === 'below' ? 'above' : 'below';
+            
+            const opponent = {
+                username: generateRandomUsername(),
+                price: Math.round(opponentPrice),
+                direction: opponentDirection,
+                betAmount: Math.min(queueEntry.betAmount, [10, 50, 100][Math.floor(Math.random() * 3)])
+            };
+            
+            currentBattleMatch = {
+                user: queueEntry,
+                opponent: opponent,
+                potSize: Math.min(queueEntry.betAmount, opponent.betAmount) * 2
+            };
+            
+            showBattleAcceptModal();
+        }
+
+        function showBattleAcceptModal() {
+            document.getElementById('battleAcceptModal').classList.remove('hidden');
+            
+            // Update battle info
+            document.getElementById('opponentInfo').textContent = `@${currentBattleMatch.opponent.username}`;
+            document.getElementById('battleDetails').textContent = 
+                `$${currentBattleMatch.potSize} pot • 4 hours`;
+            
+            // Start 60-second timer
+            let timeLeft = 60;
+            document.getElementById('battleTimer').textContent = timeLeft;
+            
+            // Play battle found sound (if audio is enabled)
+            playBattleFoundSound();
+            
+            battleAcceptTimer = setInterval(() => {
+                timeLeft--;
+                document.getElementById('battleTimer').textContent = timeLeft;
+                
+                // Update timer circle
+                const circumference = 283; // 2 * π * 45
+                const offset = circumference - (timeLeft / 60) * circumference;
+                document.getElementById('timerCircle').style.strokeDashoffset = offset;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(battleAcceptTimer);
+                    declineBattle(); // Auto-decline if time runs out
+                }
+            }, 1000);
+        }
+
+        function acceptBattle() {
+            clearInterval(battleAcceptTimer);
+            document.getElementById('battleAcceptModal').classList.add('hidden');
+            
+            // Remove from queue
+            userQueue = userQueue.filter(q => q.id !== currentBattleMatch.user.id);
+            
+            // Add to active battles
+            const battle = {
+                id: Date.now(),
+                user: currentBattleMatch.user,
+                opponent: currentBattleMatch.opponent,
+                potSize: currentBattleMatch.potSize,
+                startTime: Date.now(),
+                endTime: Date.now() + (4 * 60 * 60 * 1000), // 4 hours
+                status: 'active'
+            };
+            
+            activeBattles.push(battle);
+            updateQueueDisplay();
+            
+            // Show success message
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+            statusDiv.textContent = `⚔️ Battle accepted! $${battle.potSize} pot • Ends in 4 hours`;
+            
+            // Schedule battle resolution
+            setTimeout(() => resolveBattle(battle), 4 * 60 * 60 * 1000);
+            currentBattleMatch = null;
+        }
+
+        function declineBattle() {
+            clearInterval(battleAcceptTimer);
+            document.getElementById('battleAcceptModal').classList.add('hidden');
+            currentBattleMatch = null;
+            
+            // Show message
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-yellow-900/20 border border-yellow-500/30 text-yellow-300';
+            statusDiv.textContent = '❌ Battle declined. Continuing search for opponents...';
+        }
+
+        function updateQueueDisplay() {
+            const queueList = document.getElementById('queueList');
+            const emptyQueue = document.getElementById('emptyQueue');
+            const activeBattlesList = document.getElementById('activeBattlesList');
+            const emptyBattles = document.getElementById('emptyBattles');
+            
+            // Update queue
+            if (userQueue.length === 0) {
+                queueList.innerHTML = '';
+                emptyQueue.style.display = 'block';
+            } else {
+                emptyQueue.style.display = 'none';
+                queueList.innerHTML = userQueue.map(entry => `
+                    <div class="bg-secondary/50 rounded-lg p-4 border border-gaming-secondary/30">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <div class="font-medium text-foreground">
+                                    ${entry.direction === 'below' ? '📉' : '📈'} BTC ${entry.direction} $${entry.price.toLocaleString()}
+                                </div>
+                                <div class="text-sm text-muted-foreground">
+                                    $${entry.betAmount} bet • ${getTimeInQueue(entry.timestamp)}
+                                </div>
+                            </div>
+                            <button onclick="exitQueue(${entry.id})" 
+                                    class="px-3 py-1 bg-red-600/20 hover:bg-red-600/30 border border-red-500/30 rounded text-red-400 text-sm transition-colors">
+                                Exit Queue
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            // Update active battles
+            if (activeBattles.length === 0) {
+                activeBattlesList.innerHTML = '';
+                emptyBattles.style.display = 'block';
+            } else {
+                emptyBattles.style.display = 'none';
+                activeBattlesList.innerHTML = activeBattles.map(battle => `
+                    <div class="bg-gaming-primary/10 rounded-lg p-4 border border-gaming-primary/30">
+                        <div class="flex justify-between items-center mb-2">
+                            <div class="font-medium text-gaming-primary">⚔️ vs @${battle.opponent.username}</div>
+                            <div class="text-sm text-gaming-primary font-bold">$${battle.potSize} pot</div>
+                        </div>
+                        <div class="text-sm text-muted-foreground mb-2">
+                            You: ${battle.user.direction === 'below' ? '📉' : '📈'} $${battle.user.price.toLocaleString()} • 
+                            Opponent: ${battle.opponent.direction === 'below' ? '📉' : '📈'} $${battle.opponent.price.toLocaleString()}
+                        </div>
+                        <div class="text-xs text-gaming-secondary">
+                            ⏰ ${getTimeRemaining(battle.endTime)}
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function exitQueue(queueId) {
+            userQueue = userQueue.filter(q => q.id !== queueId);
+            updateQueueDisplay();
+            
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-yellow-900/20 border border-yellow-500/30 text-yellow-300';
+            statusDiv.textContent = '🚪 Exited queue successfully';
+        }
+
+        function getTimeInQueue(timestamp) {
+            const seconds = Math.floor((Date.now() - timestamp) / 1000);
+            if (seconds < 60) return `${seconds}s in queue`;
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m in queue`;
+            const hours = Math.floor(minutes / 60);
+            return `${hours}h ${minutes % 60}m in queue`;
+        }
+
+        function getTimeRemaining(endTime) {
+            const remaining = endTime - Date.now();
+            if (remaining <= 0) return 'Resolving...';
+            
+            const hours = Math.floor(remaining / (1000 * 60 * 60));
+            const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+            return `${hours}h ${minutes}m remaining`;
+        }
+
+        function generateRandomUsername() {
+            const adjectives = ['Swift', 'Bold', 'Clever', 'Brave', 'Sharp', 'Quick', 'Smart', 'Elite'];
+            const nouns = ['Trader', 'Player', 'Gamer', 'Warrior', 'Hunter', 'Master', 'Pro', 'Legend'];
+            const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+            const noun = nouns[Math.floor(Math.random() * nouns.length)];
+            const num = Math.floor(Math.random() * 999) + 1;
+            return `${adj}${noun}${num}`;
+        }
+
+        function playBattleFoundSound() {
+            // Create audio context for battle found sound
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+            } catch (error) {
+                console.log('Audio not supported');
+            }
+        }
+
+        function resolveBattle(battle) {
+            // Get current BTC price for resolution
+            const finalPrice = currentBTCPrice || (Math.random() * 10000 + 40000); // Mock if no real price
+            
+            // Determine winner based on who was closer
+            const userDistance = Math.abs(finalPrice - battle.user.price);
+            const opponentDistance = Math.abs(finalPrice - battle.opponent.price);
+            
+            const userWins = userDistance < opponentDistance;
+            const winner = userWins ? 'You' : battle.opponent.username;
+            
+            // Remove from active battles
+            activeBattles = activeBattles.filter(b => b.id !== battle.id);
+            updateQueueDisplay();
+            
+            // Show result
+            const statusDiv = document.getElementById('status');
+            if (userWins) {
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                statusDiv.textContent = `🏆 You won $${battle.potSize}! Final BTC: $${finalPrice.toLocaleString()} (closer to your $${battle.user.price.toLocaleString()})`;
+            } else {
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = `💔 You lost to @${battle.opponent.username}. Final BTC: $${finalPrice.toLocaleString()} (closer to their $${battle.opponent.price.toLocaleString()})`;
+            }
+        }
+
+        // Initialize queue display on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateQueueDisplay();
+            
+            // Update queue times every 30 seconds
+            setInterval(updateQueueDisplay, 30000);
+        });
     </script>
 </body>
 </html>
