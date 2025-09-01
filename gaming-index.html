@@ -6,8 +6,8 @@
     <title>Crystal Play Gate - X Connect & Phantom Wallet</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="supabase_config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="supabase_config.js" defer></script>
     <script>
         tailwind.config = {
             theme: {
@@ -1774,8 +1774,47 @@
         // Initialize database connection and user authentication
         async function initializePvPSystem() {
             try {
+                // Wait for scripts to be fully loaded
+                let attempts = 0;
+                const maxAttempts = 10;
+                
+                while (attempts < maxAttempts) {
+                    if (typeof window.supabase !== 'undefined' && typeof window.PvPDatabase === 'function') {
+                        break;
+                    }
+                    console.log(`Waiting for scripts to load... (${attempts + 1}/${maxAttempts})`);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    attempts++;
+                }
+                
+                if (attempts >= maxAttempts) {
+                    console.error('❌ Scripts failed to load after 2 seconds');
+                    return;
+                }
+                
+                // First initialize Supabase client
+                if (typeof window.initializeSupabase === 'function') {
+                    const initialized = window.initializeSupabase();
+                    if (!initialized) {
+                        console.error('❌ Supabase initialization failed');
+                        return;
+                    }
+                } else {
+                    console.error('❌ Supabase initialization function not found');
+                    return;
+                }
+                
+                // Wait a moment for Supabase to initialize
+                await new Promise(resolve => setTimeout(resolve, 200));
+                
                 // Initialize database connection
-                pvpDB = new PvPDatabase();
+                if (typeof window.PvPDatabase === 'function') {
+                    pvpDB = new window.PvPDatabase();
+                    console.log('✅ PvP Database initialized');
+                } else {
+                    console.error('❌ PvPDatabase class not found');
+                    return;
+                }
                 
                 // Get current user from authentication
                 const xResponse = await fetch('/auth/status', { credentials: 'include' });
@@ -1783,19 +1822,23 @@
                 
                 if (xData.authenticated) {
                     currentUser = xData.user;
-                    console.log('PvP system initialized for user:', currentUser.username);
+                    console.log('✅ PvP system initialized for user:', currentUser.username);
                 } else {
-                    console.log('User not authenticated for PvP system');
+                    console.log('ℹ️ User not authenticated for PvP system');
                 }
             } catch (error) {
-                console.error('Failed to initialize PvP system:', error);
+                console.error('❌ Failed to initialize PvP system:', error);
             }
         }
 
         // Initialize queue display on page load
         document.addEventListener('DOMContentLoaded', function() {
             updateQueueDisplay();
-            initializePvPSystem();
+            
+            // Wait for all scripts to load before initializing PvP system
+            setTimeout(() => {
+                initializePvPSystem();
+            }, 500);
             
             // Update queue times every 30 seconds
             setInterval(updateQueueDisplay, 30000);
