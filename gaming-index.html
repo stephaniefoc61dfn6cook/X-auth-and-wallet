@@ -1671,13 +1671,42 @@
                 const prediction = predictionResult.prediction;
                 queueEntry.predictionId = prediction.id;
                 
-                // Try to find a match immediately
-                const battleId = await pvpDB.findAndCreateMatch(prediction.id);
+                // Try to find a match immediately using backend API
+                const matchResponse = await fetch('/api/matchmaking/find', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        prediction_id: prediction.id
+                    })
+                });
+                
+                const matchResult = await matchResponse.json();
+                console.log('🔍 [MATCHMAKING] Match search result:', matchResult);
+                
+                if (!matchResult.success) {
+                    throw new Error(matchResult.error || 'Failed to search for match');
+                }
+                
+                const battleId = matchResult.match_found ? matchResult.battle_id : null;
                 
                 if (battleId) {
-                    // Match found! Get battle details
-                    const battle = await pvpDB.getBattleDetails(battleId);
-                    handleMatchFound(queueEntry, battle);
+                    // Match found! Get battle details using backend API
+                    const battleResponse = await fetch(`/api/battles/${battleId}`, {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
+                    
+                    const battleResult = await battleResponse.json();
+                    console.log('⚔️ [MATCHMAKING] Battle details:', battleResult);
+                    
+                    if (!battleResult.success) {
+                        throw new Error(battleResult.error || 'Failed to get battle details');
+                    }
+                    
+                    handleMatchFound(queueEntry, battleResult.battle);
                 } else {
                     // No match found, continue waiting
                     const statusDiv = document.getElementById('status');
@@ -1705,13 +1734,34 @@
                         return;
                     }
                     
-                    // Try to find a match
-                    const battleId = await pvpDB.findAndCreateMatch(queueEntry.predictionId);
+                    // Try to find a match using backend API
+                    const matchResponse = await fetch('/api/matchmaking/find', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            prediction_id: queueEntry.predictionId
+                        })
+                    });
                     
-                    if (battleId) {
+                    const matchResult = await matchResponse.json();
+                    console.log('🔄 [POLLING] Match check result:', matchResult);
+                    
+                    if (matchResult.success && matchResult.match_found) {
                         clearInterval(pollInterval);
-                        const battle = await pvpDB.getBattleDetails(battleId);
-                        handleMatchFound(queueEntry, battle);
+                        
+                        const battleResponse = await fetch(`/api/battles/${matchResult.battle_id}`, {
+                            method: 'GET',
+                            credentials: 'include'
+                        });
+                        
+                        const battleResult = await battleResponse.json();
+                        
+                        if (battleResult.success) {
+                            handleMatchFound(queueEntry, battleResult.battle);
+                        }
                     }
                 } catch (error) {
                     console.error('Match polling error:', error);
@@ -1876,9 +1926,19 @@
 
         async function exitQueue(queueId) {
             try {
-                if (pvpDB && currentUser) {
-                    // Use Supabase database
-                    await pvpDB.cancelPrediction(queueId);
+                if (currentUser) {
+                    // Use backend API to cancel prediction
+                    const cancelResponse = await fetch(`/api/predictions/${queueId}/cancel`, {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    const cancelResult = await cancelResponse.json();
+                    console.log('❌ [QUEUE_EXIT] Cancel result:', cancelResult);
+                    
+                    if (!cancelResult.success) {
+                        console.error('Failed to cancel prediction:', cancelResult.error);
+                    }
                     
                     // Refresh user data
                     await loadUserData();

@@ -960,6 +960,247 @@ def create_prediction():
             'error': str(e)
         }), 500
 
+@app.route('/api/matchmaking/find', methods=['POST'])
+def find_and_create_match():
+    """Find and create a match using service key to bypass RLS"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        # Get prediction ID from request
+        data = request.get_json()
+        if not data or not data.get('prediction_id'):
+            return jsonify({
+                'success': False,
+                'error': 'prediction_id required'
+            }), 400
+        
+        prediction_id = data['prediction_id']
+        print(f"[MATCHMAKING_API] Finding match for prediction {prediction_id}")
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        # 1. Get the prediction details
+        pred_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/predictions?id=eq.{prediction_id}&select=*',
+            headers=headers
+        )
+        
+        print(f"[MATCHMAKING_API] Prediction query status: {pred_response.status_code}")
+        
+        if pred_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get prediction: {pred_response.text}'
+            }), 500
+        
+        predictions = pred_response.json()
+        if not predictions:
+            return jsonify({
+                'success': False,
+                'error': 'Prediction not found'
+            }), 404
+        
+        prediction = predictions[0]
+        print(f"[MATCHMAKING_API] Found prediction: {prediction}")
+        
+        # 2. Call find_matching_prediction function
+        match_response = requests.post(
+            f'{SUPABASE_URL}/rest/v1/rpc/find_matching_prediction',
+            headers=headers,
+            json={
+                'p_user_id': prediction['user_id'],
+                'p_predicted_price': float(prediction['predicted_price']),
+                'p_direction': prediction['direction'],
+                'p_bet_amount': prediction['bet_amount']
+            }
+        )
+        
+        print(f"[MATCHMAKING_API] Match search status: {match_response.status_code}")
+        print(f"[MATCHMAKING_API] Match search response: {match_response.text}")
+        
+        if match_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Match search failed: {match_response.text}'
+            }), 500
+        
+        match_id = match_response.json()
+        
+        if not match_id:
+            # No match found
+            return jsonify({
+                'success': True,
+                'match_found': False,
+                'battle_id': None
+            })
+        
+        # 3. Create battle using the matched predictions
+        battle_response = requests.post(
+            f'{SUPABASE_URL}/rest/v1/rpc/create_battle',
+            headers=headers,
+            json={
+                'p_prediction1_id': prediction_id,
+                'p_prediction2_id': match_id
+            }
+        )
+        
+        print(f"[MATCHMAKING_API] Battle creation status: {battle_response.status_code}")
+        print(f"[MATCHMAKING_API] Battle creation response: {battle_response.text}")
+        
+        if battle_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Battle creation failed: {battle_response.text}'
+            }), 500
+        
+        battle_id = battle_response.json()
+        
+        return jsonify({
+            'success': True,
+            'match_found': True,
+            'battle_id': battle_id
+        })
+        
+    except Exception as e:
+        print(f"[MATCHMAKING_API] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/battles/<battle_id>', methods=['GET'])
+def get_battle_details(battle_id):
+    """Get battle details using service key to bypass RLS"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        print(f"[BATTLE_API] Getting details for battle {battle_id}")
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get battle with related data
+        battle_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}&select=*,user1:users!battles_user1_id_fkey(*),user2:users!battles_user2_id_fkey(*),user1_prediction:predictions!battles_user1_prediction_id_fkey(*),user2_prediction:predictions!battles_user2_prediction_id_fkey(*)',
+            headers=headers
+        )
+        
+        print(f"[BATTLE_API] Battle query status: {battle_response.status_code}")
+        
+        if battle_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get battle: {battle_response.text}'
+            }), 500
+        
+        battles = battle_response.json()
+        if not battles:
+            return jsonify({
+                'success': False,
+                'error': 'Battle not found'
+            }), 404
+        
+        battle = battles[0]
+        print(f"[BATTLE_API] Found battle: {battle['id']}")
+        
+        return jsonify({
+            'success': True,
+            'battle': battle
+        })
+        
+    except Exception as e:
+        print(f"[BATTLE_API] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/predictions/<prediction_id>/cancel', methods=['POST'])
+def cancel_prediction(prediction_id):
+    """Cancel a prediction using service key to bypass RLS"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        # Get user ID from session
+        user_id = user_info.get('db_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User database ID not found'
+            }), 400
+        
+        print(f"[CANCEL_API] Canceling prediction {prediction_id} for user {user_id}")
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+        }
+        
+        # Cancel the prediction
+        response = requests.patch(
+            f'{SUPABASE_URL}/rest/v1/predictions?id=eq.{prediction_id}&user_id=eq.{user_id}',
+            headers=headers,
+            json={'status': 'cancelled'}
+        )
+        
+        print(f"[CANCEL_API] Status: {response.status_code}")
+        print(f"[CANCEL_API] Response: {response.text}")
+        
+        if response.status_code == 200:
+            result = response.json()
+            return jsonify({
+                'success': True,
+                'prediction': result[0] if result else None
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to cancel prediction: {response.text}'
+            }), 500
+            
+    except Exception as e:
+        print(f"[CANCEL_API] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
