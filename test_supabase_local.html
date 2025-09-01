@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase PvP Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-900 text-white p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8">🗄️ Supabase PvP Database Test</h1>
+        
+        <!-- Connection Status -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Connection Status</h2>
+            <div id="connectionStatus" class="text-yellow-400">⏳ Testing connection...</div>
+        </div>
+        
+        <!-- Test Results -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test Results</h2>
+            <div id="testResults" class="space-y-2 font-mono text-sm"></div>
+        </div>
+        
+        <!-- Manual Tests -->
+        <div class="bg-gray-800 rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Manual Tests</h2>
+            <div class="grid grid-cols-2 gap-4">
+                <button onclick="testCreateUser()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded">
+                    👤 Create Test User
+                </button>
+                <button onclick="testCreatePrediction()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded">
+                    🎯 Create Prediction
+                </button>
+                <button onclick="testGetLeaderboard()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded">
+                    🏆 Get Leaderboard
+                </button>
+                <button onclick="testCleanup()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded">
+                    🧹 Cleanup Data
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Supabase configuration - UPDATE THESE WITH YOUR VALUES
+        const SUPABASE_CONFIG = {
+            url: 'https://your-project-id.supabase.co', // UPDATE THIS
+            anonKey: 'your-anon-key-here' // UPDATE THIS
+        };
+
+        let supabase = null;
+        let testUser = null;
+
+        // Initialize and test connection
+        async function initializeAndTest() {
+            const statusDiv = document.getElementById('connectionStatus');
+            const resultsDiv = document.getElementById('testResults');
+            
+            try {
+                // Initialize Supabase
+                statusDiv.innerHTML = '⏳ Initializing Supabase...';
+                supabase = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+                
+                // Test connection
+                statusDiv.innerHTML = '⏳ Testing database connection...';
+                const { data, error } = await supabase.from('users').select('count').limit(1);
+                
+                if (error) {
+                    throw new Error(`Database connection failed: ${error.message}`);
+                }
+                
+                statusDiv.innerHTML = '✅ Connected to Supabase successfully!';
+                addTestResult('✅ Supabase client initialized');
+                addTestResult('✅ Database connection verified');
+                
+                // Run automated tests
+                await runAutomatedTests();
+                
+            } catch (error) {
+                console.error('Initialization error:', error);
+                statusDiv.innerHTML = `❌ Connection failed: ${error.message}`;
+                addTestResult(`❌ Error: ${error.message}`);
+                
+                // Show configuration help
+                addTestResult('');
+                addTestResult('🔧 Configuration needed:');
+                addTestResult('1. Update SUPABASE_CONFIG.url with your project URL');
+                addTestResult('2. Update SUPABASE_CONFIG.anonKey with your anon key');
+                addTestResult('3. Run the schema SQL in your Supabase dashboard');
+            }
+        }
+
+        async function runAutomatedTests() {
+            addTestResult('');
+            addTestResult('🧪 Running automated tests...');
+            
+            try {
+                // Test 1: Check tables exist
+                const tables = ['users', 'predictions', 'battles', 'battle_invitations', 'battle_history'];
+                for (const table of tables) {
+                    const { error } = await supabase.from(table).select('*').limit(1);
+                    if (error && error.code !== 'PGRST116') { // PGRST116 = empty table, which is ok
+                        throw new Error(`Table ${table} not found or accessible`);
+                    }
+                    addTestResult(`✅ Table '${table}' exists and accessible`);
+                }
+                
+                // Test 2: Check functions exist
+                addTestResult('');
+                addTestResult('🔧 Testing database functions...');
+                
+                // This will fail if functions don't exist
+                const { error: funcError } = await supabase.rpc('cleanup_expired_predictions');
+                if (funcError && !funcError.message.includes('permission denied')) {
+                    addTestResult(`⚠️ Function test: ${funcError.message}`);
+                } else {
+                    addTestResult('✅ Database functions accessible');
+                }
+                
+                addTestResult('');
+                addTestResult('🎉 Automated tests completed!');
+                addTestResult('💡 Use manual test buttons above to test specific features');
+                
+            } catch (error) {
+                addTestResult(`❌ Test failed: ${error.message}`);
+            }
+        }
+
+        async function testCreateUser() {
+            try {
+                addTestResult('');
+                addTestResult('👤 Testing user creation...');
+                
+                const userData = {
+                    id: crypto.randomUUID(),
+                    username: `TestUser${Date.now()}`,
+                    x_username: 'test_x_user',
+                    phantom_address: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM'
+                };
+                
+                const { data, error } = await supabase
+                    .from('users')
+                    .insert(userData)
+                    .select()
+                    .single();
+                
+                if (error) throw error;
+                
+                testUser = data;
+                addTestResult(`✅ User created: ${data.username} (${data.id})`);
+                
+            } catch (error) {
+                addTestResult(`❌ User creation failed: ${error.message}`);
+            }
+        }
+
+        async function testCreatePrediction() {
+            if (!testUser) {
+                addTestResult('❌ Create a test user first');
+                return;
+            }
+            
+            try {
+                addTestResult('');
+                addTestResult('🎯 Testing prediction creation...');
+                
+                const predictionData = {
+                    user_id: testUser.id,
+                    predicted_price: 45000 + Math.random() * 1000,
+                    direction: Math.random() > 0.5 ? 'above' : 'below',
+                    bet_amount: [10, 50, 100][Math.floor(Math.random() * 3)],
+                    current_btc_price: 44500
+                };
+                
+                const { data, error } = await supabase
+                    .from('predictions')
+                    .insert(predictionData)
+                    .select()
+                    .single();
+                
+                if (error) throw error;
+                
+                addTestResult(`✅ Prediction created: ${data.direction} $${data.predicted_price} for $${data.bet_amount}`);
+                
+                // Try to find a match
+                addTestResult('🔍 Testing matchmaking...');
+                const { data: matchId, error: matchError } = await supabase.rpc('find_matching_prediction', {
+                    p_user_id: testUser.id,
+                    p_predicted_price: predictionData.predicted_price,
+                    p_direction: predictionData.direction,
+                    p_bet_amount: predictionData.bet_amount
+                });
+                
+                if (matchError) {
+                    addTestResult(`⚠️ Matchmaking test: ${matchError.message}`);
+                } else if (matchId) {
+                    addTestResult(`🎯 Match found: ${matchId}`);
+                } else {
+                    addTestResult('ℹ️ No match found (expected for first prediction)');
+                }
+                
+            } catch (error) {
+                addTestResult(`❌ Prediction creation failed: ${error.message}`);
+            }
+        }
+
+        async function testGetLeaderboard() {
+            try {
+                addTestResult('');
+                addTestResult('🏆 Testing leaderboard...');
+                
+                const { data, error } = await supabase
+                    .from('leaderboard_view')
+                    .select('*')
+                    .limit(5);
+                
+                if (error) throw error;
+                
+                if (data.length === 0) {
+                    addTestResult('ℹ️ Leaderboard is empty (no battles completed yet)');
+                } else {
+                    addTestResult(`✅ Leaderboard loaded: ${data.length} players`);
+                    data.forEach((player, index) => {
+                        addTestResult(`  ${index + 1}. ${player.username}: ${player.total_winnings} wins`);
+                    });
+                }
+                
+            } catch (error) {
+                addTestResult(`❌ Leaderboard test failed: ${error.message}`);
+            }
+        }
+
+        async function testCleanup() {
+            try {
+                addTestResult('');
+                addTestResult('🧹 Testing cleanup function...');
+                
+                const { error } = await supabase.rpc('cleanup_expired_predictions');
+                
+                if (error) throw error;
+                
+                addTestResult('✅ Cleanup function executed successfully');
+                
+            } catch (error) {
+                addTestResult(`❌ Cleanup test failed: ${error.message}`);
+            }
+        }
+
+        function addTestResult(message) {
+            const resultsDiv = document.getElementById('testResults');
+            const div = document.createElement('div');
+            div.textContent = message;
+            if (message.startsWith('✅')) div.className = 'text-green-400';
+            else if (message.startsWith('❌')) div.className = 'text-red-400';
+            else if (message.startsWith('⚠️')) div.className = 'text-yellow-400';
+            else if (message.startsWith('🔧') || message.startsWith('💡')) div.className = 'text-blue-400';
+            else div.className = 'text-gray-300';
+            
+            resultsDiv.appendChild(div);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initializeAndTest);
+    </script>
+</body>
+</html>

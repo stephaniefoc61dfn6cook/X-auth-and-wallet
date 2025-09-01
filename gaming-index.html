@@ -1553,13 +1553,31 @@
             }
         }
 
-        function exitQueue(queueId) {
-            userQueue = userQueue.filter(q => q.id !== queueId);
-            updateQueueDisplay();
-            
-            const statusDiv = document.getElementById('status');
-            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-yellow-900/20 border border-yellow-500/30 text-yellow-300';
-            statusDiv.textContent = '🚪 Exited queue successfully';
+        async function exitQueue(queueId) {
+            try {
+                if (pvpDB && currentUser) {
+                    // Use Supabase database
+                    await pvpDB.cancelPrediction(queueId);
+                    
+                    // Refresh user data
+                    await loadUserData();
+                    updateQueueDisplay();
+                } else {
+                    // Fallback to local
+                    userQueue = userQueue.filter(q => q.id !== queueId);
+                    updateQueueDisplay();
+                }
+                
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-yellow-900/20 border border-yellow-500/30 text-yellow-300';
+                statusDiv.textContent = '🚪 Exited queue successfully';
+                
+            } catch (error) {
+                console.error('Error exiting queue:', error);
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = '❌ Error exiting queue. Please try again.';
+            }
         }
 
         function getTimeInQueue(timestamp) {
