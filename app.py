@@ -36,38 +36,46 @@ def find_existing_user(x_username=None, phantom_address=None):
             'Content-Type': 'application/json'
         }
         
-        # Build query parameters with proper URL encoding
-        query_params = []
+        # Try to find user by X username first, then by Phantom address
+        user = None
+        
         if x_username:
             encoded_username = quote(str(x_username), safe='')
-            print(f"[USER_LOOKUP] X Username: '{x_username}' -> '{encoded_username}'")
-            query_params.append(f'x_username=eq.{encoded_username}')
-        if phantom_address:
-            encoded_address = quote(str(phantom_address), safe='')
-            print(f"[USER_LOOKUP] Phantom Address: '{phantom_address}' -> '{encoded_address}'")
-            query_params.append(f'phantom_address=eq.{encoded_address}')
-        
-        if not query_params:
-            return None
+            print(f"[USER_LOOKUP] Searching by X Username: '{x_username}' -> '{encoded_username}'")
             
-        # Use OR condition to find user by either X username or Phantom address
-        query = 'or=(' + ','.join(query_params) + ')'
+            response = requests.get(
+                f'{SUPABASE_URL}/rest/v1/users?x_username=eq.{encoded_username}',
+                headers=headers
+            )
+            
+            print(f"[USER_LOOKUP] X Username query status: {response.status_code}")
+            print(f"[USER_LOOKUP] X Username query response: {response.text}")
+            
+            if response.status_code == 200:
+                users = response.json()
+                if users:
+                    user = users[0]
+                    print(f"[USER_LOOKUP] Found user by X username: {user.get('id')}")
         
-        response = requests.get(
-            f'{SUPABASE_URL}/rest/v1/users?{query}',
-            headers=headers
-        )
+        if not user and phantom_address:
+            encoded_address = quote(str(phantom_address), safe='')
+            print(f"[USER_LOOKUP] Searching by Phantom Address: '{phantom_address}' -> '{encoded_address}'")
+            
+            response = requests.get(
+                f'{SUPABASE_URL}/rest/v1/users?phantom_address=eq.{encoded_address}',
+                headers=headers
+            )
+            
+            print(f"[USER_LOOKUP] Phantom address query status: {response.status_code}")
+            print(f"[USER_LOOKUP] Phantom address query response: {response.text}")
+            
+            if response.status_code == 200:
+                users = response.json()
+                if users:
+                    user = users[0]
+                    print(f"[USER_LOOKUP] Found user by Phantom address: {user.get('id')}")
         
-        print(f"[USER_LOOKUP] Query: {query}")
-        print(f"[USER_LOOKUP] Status: {response.status_code}")
-        print(f"[USER_LOOKUP] Response: {response.text}")
-        
-        if response.status_code == 200:
-            users = response.json()
-            return users[0] if users else None
-        else:
-            print(f"[USER_LOOKUP] Error: {response.text}")
-            return None
+        return user
             
     except Exception as e:
         print(f"[USER_LOOKUP] Exception: {str(e)}")
