@@ -1027,10 +1027,21 @@
 
         // Phantom Wallet Functions
         async function connectPhantom() {
+            console.log('🔵 [PHANTOM] Starting connection process...');
             const statusDiv = document.getElementById('status');
+            
+            // Detailed environment logging
+            console.log('🔍 [PHANTOM] Environment check:');
+            console.log('  - window.solana exists:', !!window.solana);
+            console.log('  - window.solana.isPhantom:', window.solana?.isPhantom);
+            console.log('  - window.solana.isConnected:', window.solana?.isConnected);
+            console.log('  - window.solana.publicKey:', window.solana?.publicKey?.toString());
+            console.log('  - User Agent:', navigator.userAgent);
+            console.log('  - Location:', window.location.href);
             
             // Check if Phantom is installed
             if (!window.solana) {
+                console.log('❌ [PHANTOM] Phantom wallet not detected');
                 statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
                 statusDiv.innerHTML = `
                     <div>
@@ -1043,72 +1054,147 @@
                 return;
             }
 
-            // Wait for Phantom to be ready
+            console.log('✅ [PHANTOM] Phantom wallet detected');
+
+            // Wait for Phantom to be ready with more detailed logging
             let attempts = 0;
-            const maxAttempts = 10;
+            const maxAttempts = 20; // Increased attempts
             
-            while (attempts < maxAttempts && (!window.solana.isPhantom || !window.solana.isConnected === undefined)) {
-                console.log(`Waiting for Phantom to be ready... (${attempts + 1}/${maxAttempts})`);
-                await new Promise(resolve => setTimeout(resolve, 100));
+            console.log('⏳ [PHANTOM] Waiting for Phantom to be ready...');
+            while (attempts < maxAttempts) {
+                const isPhantom = window.solana.isPhantom;
+                const hasConnect = typeof window.solana.connect === 'function';
+                
+                console.log(`  Attempt ${attempts + 1}/${maxAttempts}:`);
+                console.log('    - isPhantom:', isPhantom);
+                console.log('    - hasConnect:', hasConnect);
+                console.log('    - isConnected:', window.solana.isConnected);
+                
+                if (isPhantom && hasConnect) {
+                    console.log('✅ [PHANTOM] Phantom is ready!');
+                    break;
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 200));
                 attempts++;
             }
             
             if (!window.solana.isPhantom) {
+                console.log('❌ [PHANTOM] Phantom not properly initialized after waiting');
                 statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
                 statusDiv.textContent = 'Please install the official Phantom wallet extension.';
                 return;
             }
             
             try {
+                console.log('🔄 [PHANTOM] Starting connection attempt...');
                 statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-purple-900/20 border border-purple-500/30 text-purple-300';
                 statusDiv.textContent = 'Connecting to Phantom wallet...';
                 
                 // Check if already connected
-                if (window.solana.isConnected) {
-                    console.log('Phantom already connected, using existing connection');
+                if (window.solana.isConnected && window.solana.publicKey) {
+                    console.log('✅ [PHANTOM] Already connected, using existing connection');
+                    console.log('  - Public Key:', window.solana.publicKey.toString());
                     const publicKey = window.solana.publicKey.toString();
                     await handlePhantomConnection(publicKey, statusDiv);
                     return;
                 }
                 
-                // Attempt connection with better error handling
+                console.log('🔗 [PHANTOM] Attempting new connection...');
+                
+                // Try multiple connection methods in order of compatibility
                 let response;
-                try {
-                    response = await window.solana.connect({ onlyIfTrusted: false });
-                } catch (connectError) {
-                    console.error('Initial connect failed:', connectError);
-                    
-                    // Try alternative connection method
-                    if (window.solana.connect) {
-                        response = await window.solana.connect();
-                    } else {
-                        throw new Error('Phantom connection method not available');
+                const connectionMethods = [
+                    { name: 'Legacy Basic connect()', fn: () => window.solana.connect() },
+                    { name: 'Modern connect({ onlyIfTrusted: false })', fn: () => window.solana.connect({ onlyIfTrusted: false }) },
+                    { name: 'Trusted connect({ onlyIfTrusted: true })', fn: () => window.solana.connect({ onlyIfTrusted: true }) },
+                    { name: 'Request method', fn: () => window.solana.request({ method: 'connect' }) },
+                    { name: 'Direct enable', fn: () => window.solana.enable ? window.solana.enable() : Promise.reject(new Error('enable not available')) }
+                ];
+                
+                let lastError = null;
+                let methodIndex = 0;
+                
+                for (const method of connectionMethods) {
+                    try {
+                        console.log(`  Method ${methodIndex + 1}: ${method.name}`);
+                        response = await method.fn();
+                        console.log(`✅ [PHANTOM] ${method.name} succeeded`);
+                        console.log('  Response:', response);
+                        break;
+                    } catch (error) {
+                        console.log(`❌ [PHANTOM] ${method.name} failed:`, error);
+                        console.log('  Error details:');
+                        console.log('    - code:', error.code);
+                        console.log('    - message:', error.message);
+                        console.log('    - name:', error.name);
+                        lastError = error;
+                        methodIndex++;
                     }
                 }
                 
-                if (!response || !response.publicKey) {
+                if (!response) {
+                    console.log('❌ [PHANTOM] All connection methods failed');
+                    console.log('  Available methods on window.solana:', Object.keys(window.solana).filter(key => typeof window.solana[key] === 'function'));
+                    throw lastError || new Error('All connection methods failed');
+                }
+                
+                console.log('🔍 [PHANTOM] Connection response:', response);
+                
+                if (!response) {
+                    console.log('❌ [PHANTOM] No response from connection attempt');
+                    throw new Error('No response received from Phantom');
+                }
+                
+                if (!response.publicKey) {
+                    console.log('❌ [PHANTOM] No public key in response');
+                    console.log('  Response keys:', Object.keys(response));
                     throw new Error('No public key received from Phantom');
                 }
                 
                 const publicKey = response.publicKey.toString();
+                console.log('✅ [PHANTOM] Got public key:', publicKey);
+                
                 await handlePhantomConnection(publicKey, statusDiv);
                 
             } catch (error) {
-                console.error('Phantom wallet connection error:', error);
+                console.log('❌ [PHANTOM] Connection failed with error:', error);
+                console.log('  Error type:', typeof error);
+                console.log('  Error constructor:', error.constructor.name);
+                console.log('  Error code:', error.code);
+                console.log('  Error message:', error.message);
+                console.log('  Error stack:', error.stack);
+                console.log('  Error keys:', Object.keys(error));
+                
+                // Log the full error object
+                try {
+                    console.log('  Error JSON:', JSON.stringify(error, null, 2));
+                } catch (jsonError) {
+                    console.log('  Could not stringify error:', jsonError.message);
+                }
+                
                 statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
                 
-                // Handle specific error codes
+                // Handle specific error codes with detailed logging
                 if (error.code === 4001 || error.message?.includes('User rejected')) {
+                    console.log('🚫 [PHANTOM] User rejected connection');
                     statusDiv.textContent = '❌ Connection rejected by user. Please try again.';
                 } else if (error.code === -32002 || error.message?.includes('already pending')) {
+                    console.log('⏳ [PHANTOM] Connection already pending');
                     statusDiv.textContent = '⏳ Connection request already pending. Check your Phantom wallet.';
                 } else if (error.message?.includes('Unexpected error')) {
+                    console.log('❗ [PHANTOM] Unexpected error from Phantom extension');
                     statusDiv.textContent = '🔄 Phantom connection issue. Please refresh the page and try again.';
                 } else if (error.message?.includes('not available')) {
+                    console.log('❌ [PHANTOM] Connection method not available');
                     statusDiv.textContent = '⚠️ Phantom wallet not properly installed. Please reinstall Phantom.';
                 } else {
+                    console.log('❌ [PHANTOM] Generic connection error');
                     statusDiv.textContent = `❌ Connection failed: ${error.message || 'Please try again'}`;
                 }
+                
+                // Add detailed error info for debugging
+                statusDiv.innerHTML += `<div style="font-size: 0.8em; margin-top: 8px; opacity: 0.7;">Debug: ${error.constructor.name} - ${error.message}</div>`;
                 
                 // Add retry button for certain errors
                 if (error.code !== 4001) {
@@ -1125,7 +1211,10 @@
 
         // Helper function to handle the actual connection process
         async function handlePhantomConnection(publicKey, statusDiv) {
+            console.log('🔗 [PHANTOM] Processing connection for public key:', publicKey);
+            
             try {
+                console.log('📡 [PHANTOM] Sending to backend...');
                 const backendResponse = await fetch('/auth/phantom/connect', {
                     method: 'POST',
                     headers: {
@@ -1137,9 +1226,14 @@
                     })
                 });
                 
+                console.log('📡 [PHANTOM] Backend response status:', backendResponse.status);
+                console.log('📡 [PHANTOM] Backend response headers:', [...backendResponse.headers.entries()]);
+                
                 const data = await backendResponse.json();
+                console.log('📡 [PHANTOM] Backend response data:', data);
                 
                 if (data.success) {
+                    console.log('✅ [PHANTOM] Backend connection successful');
                     statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
                     const shortKey = publicKey.substring(0, 4) + '...' + publicKey.substring(publicKey.length - 4);
                     statusDiv.textContent = `✅ Phantom wallet connected! ${shortKey}`;
@@ -1156,11 +1250,16 @@
                     document.getElementById('signMessageContainer').classList.remove('hidden');
                     
                 } else {
+                    console.log('❌ [PHANTOM] Backend returned error:', data.error);
                     throw new Error(data.error || 'Backend connection failed');
                 }
                 
             } catch (backendError) {
-                console.error('Backend connection error:', backendError);
+                console.log('❌ [PHANTOM] Backend connection error:', backendError);
+                console.log('  Backend error type:', typeof backendError);
+                console.log('  Backend error message:', backendError.message);
+                console.log('  Backend error stack:', backendError.stack);
+                
                 statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
                 statusDiv.textContent = `❌ Failed to register wallet: ${backendError.message}`;
             }
