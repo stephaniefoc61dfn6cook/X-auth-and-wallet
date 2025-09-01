@@ -6,6 +6,8 @@
     <title>Crystal Play Gate - X Connect & Phantom Wallet</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase_config.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -1283,9 +1285,35 @@
         let activeBattles = [];
         let battleAcceptTimer = null;
         let currentBattleMatch = null;
+        
+        // Database and Authentication Variables
+        let pvpDB = null;
+        let currentUser = null;
 
         // PvP Modal Functions
-        function openPvPModal() {
+        async function openPvPModal() {
+            // Check authentication before opening modal
+            try {
+                const xResponse = await fetch('/auth/status', { credentials: 'include' });
+                const xData = await xResponse.json();
+                
+                const phantomResponse = await fetch('/auth/phantom/status', { credentials: 'include' });
+                const phantomData = await phantomResponse.json();
+                
+                if (!xData.authenticated || !phantomData.connected) {
+                    const statusDiv = document.getElementById('status');
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-orange-900/20 border border-orange-500/30 text-orange-300';
+                    statusDiv.textContent = '⚠️ PvP Ranked requires authentication! Please connect both X account and Phantom wallet.';
+                    return;
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = '❌ Authentication check failed. Please try again.';
+                return;
+            }
+            
             document.getElementById('pvpModal').classList.remove('hidden');
             // Update current BTC price in modal
             document.getElementById('pvpCurrentPrice').textContent = 
@@ -1370,9 +1398,31 @@
             }
         }
 
-        function enterQueue() {
+        async function enterQueue() {
             if (!pvpPrediction.price || !pvpPrediction.direction || !pvpPrediction.betAmount) {
                 alert('Please complete all fields');
+                return;
+            }
+            
+            // Verify user is fully authenticated before entering queue
+            try {
+                const xResponse = await fetch('/auth/status', { credentials: 'include' });
+                const xData = await xResponse.json();
+                
+                const phantomResponse = await fetch('/auth/phantom/status', { credentials: 'include' });
+                const phantomData = await phantomResponse.json();
+                
+                if (!xData.authenticated || !phantomData.connected) {
+                    alert('❌ Authentication required! Please connect both your X account and Phantom wallet before entering PvP queue.');
+                    return;
+                }
+                
+                // Update current user info
+                currentUser = xData.user;
+                
+            } catch (error) {
+                console.error('Authentication check failed:', error);
+                alert('❌ Failed to verify authentication. Please try again.');
                 return;
             }
             
@@ -1395,30 +1445,101 @@
             statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
             statusDiv.textContent = `🎯 Entered queue! Searching for opponent with ${pvpPrediction.direction === 'below' ? 'above' : 'below'} prediction...`;
             
-            // Start matchmaking simulation
-            setTimeout(() => simulateMatchmaking(queueEntry), Math.random() * 10000 + 5000); // 5-15 seconds
+            // Start real matchmaking with database
+            startRealMatchmaking(queueEntry);
         }
 
-        function simulateMatchmaking(queueEntry) {
-            // Check if still in queue
-            if (!userQueue.find(q => q.id === queueEntry.id)) return;
-            
-            // Create simulated opponent with opposite direction and similar price (within 0.5%)
-            const priceVariation = queueEntry.price * 0.005; // 0.5%
-            const opponentPrice = queueEntry.price + (Math.random() - 0.5) * priceVariation * 2;
-            const opponentDirection = queueEntry.direction === 'below' ? 'above' : 'below';
+        async function startRealMatchmaking(queueEntry) {
+            try {
+                // Check authentication first
+                if (!currentUser || !pvpDB) {
+                    const statusDiv = document.getElementById('status');
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                    statusDiv.textContent = '⚠️ Authentication required. Please connect both X account and Phantom wallet.';
+                    return;
+                }
+
+                // Create prediction in database
+                const predictionData = {
+                    user_id: currentUser.id,
+                    predicted_price: queueEntry.price,
+                    direction: queueEntry.direction,
+                    bet_amount: queueEntry.betAmount,
+                    current_btc_price: currentBTCPrice
+                };
+
+                const predictionId = await pvpDB.createPrediction(predictionData);
+                queueEntry.predictionId = predictionId;
+                
+                // Try to find a match immediately
+                const battleId = await pvpDB.findAndCreateMatch(predictionId);
+                
+                if (battleId) {
+                    // Match found! Get battle details
+                    const battle = await pvpDB.getBattleDetails(battleId);
+                    handleMatchFound(queueEntry, battle);
+                } else {
+                    // No match found, continue waiting
+                    const statusDiv = document.getElementById('status');
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
+                    statusDiv.textContent = `🔍 Searching for real opponents... You'll be matched with another player soon.`;
+                    
+                    // Poll for matches every 10 seconds
+                    startMatchPolling(queueEntry);
+                }
+                
+            } catch (error) {
+                console.error('Matchmaking error:', error);
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = '❌ Matchmaking failed. Please try again.';
+            }
+        }
+
+        async function startMatchPolling(queueEntry) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    // Check if still in queue
+                    if (!userQueue.find(q => q.id === queueEntry.id)) {
+                        clearInterval(pollInterval);
+                        return;
+                    }
+                    
+                    // Try to find a match
+                    const battleId = await pvpDB.findAndCreateMatch(queueEntry.predictionId);
+                    
+                    if (battleId) {
+                        clearInterval(pollInterval);
+                        const battle = await pvpDB.getBattleDetails(battleId);
+                        handleMatchFound(queueEntry, battle);
+                    }
+                } catch (error) {
+                    console.error('Match polling error:', error);
+                    clearInterval(pollInterval);
+                }
+            }, 10000); // Poll every 10 seconds
+        }
+
+        async function handleMatchFound(queueEntry, battle) {
+            // Get opponent details from battle
+            const isUser1 = battle.user1_id === currentUser.id;
+            const opponentId = isUser1 ? battle.user2_id : battle.user1_id;
+            const opponentUser = isUser1 ? battle.user2 : battle.user1;
+            const opponentPrediction = isUser1 ? battle.user2_prediction : battle.user1_prediction;
             
             const opponent = {
-                username: generateRandomUsername(),
-                price: Math.round(opponentPrice),
-                direction: opponentDirection,
-                betAmount: Math.min(queueEntry.betAmount, [10, 50, 100][Math.floor(Math.random() * 3)])
+                id: opponentId,
+                username: opponentUser?.username || 'Anonymous',
+                price: opponentPrediction.predicted_price,
+                direction: opponentPrediction.direction,
+                betAmount: opponentPrediction.bet_amount
             };
             
             currentBattleMatch = {
                 user: queueEntry,
                 opponent: opponent,
-                potSize: Math.min(queueEntry.betAmount, opponent.betAmount) * 2
+                potSize: battle.pot_size,
+                battleId: battle.id
             };
             
             showBattleAcceptModal();
@@ -1598,14 +1719,7 @@
             return `${hours}h ${minutes}m remaining`;
         }
 
-        function generateRandomUsername() {
-            const adjectives = ['Swift', 'Bold', 'Clever', 'Brave', 'Sharp', 'Quick', 'Smart', 'Elite'];
-            const nouns = ['Trader', 'Player', 'Gamer', 'Warrior', 'Hunter', 'Master', 'Pro', 'Legend'];
-            const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-            const noun = nouns[Math.floor(Math.random() * nouns.length)];
-            const num = Math.floor(Math.random() * 999) + 1;
-            return `${adj}${noun}${num}`;
-        }
+
 
         function playBattleFoundSound() {
             // Create audio context for battle found sound
@@ -1657,9 +1771,31 @@
             }
         }
 
+        // Initialize database connection and user authentication
+        async function initializePvPSystem() {
+            try {
+                // Initialize database connection
+                pvpDB = new PvPDatabase();
+                
+                // Get current user from authentication
+                const xResponse = await fetch('/auth/status', { credentials: 'include' });
+                const xData = await xResponse.json();
+                
+                if (xData.authenticated) {
+                    currentUser = xData.user;
+                    console.log('PvP system initialized for user:', currentUser.username);
+                } else {
+                    console.log('User not authenticated for PvP system');
+                }
+            } catch (error) {
+                console.error('Failed to initialize PvP system:', error);
+            }
+        }
+
         // Initialize queue display on page load
         document.addEventListener('DOMContentLoaded', function() {
             updateQueueDisplay();
+            initializePvPSystem();
             
             // Update queue times every 30 seconds
             setInterval(updateQueueDisplay, 30000);

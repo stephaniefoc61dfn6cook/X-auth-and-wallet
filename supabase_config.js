@@ -450,6 +450,28 @@ class PvPDatabase {
         }
     }
 
+    async getBattleDetails(battleId) {
+        try {
+            const { data, error } = await this.client
+                .from('battles')
+                .select(`
+                    *,
+                    user1:users!battles_user1_id_fkey(id, username),
+                    user2:users!battles_user2_id_fkey(id, username),
+                    user1_prediction:predictions!battles_user1_prediction_id_fkey(*),
+                    user2_prediction:predictions!battles_user2_prediction_id_fkey(*)
+                `)
+                .eq('id', battleId)
+                .single();
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Error fetching battle details:', error);
+            throw error;
+        }
+    }
+
     async getBattleHistory(userId, limit = 20) {
         try {
             const { data, error } = await this.client
