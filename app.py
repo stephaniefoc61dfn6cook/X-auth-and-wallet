@@ -26,11 +26,53 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://ziuxjkxenfbqgbmslczv.supa
 SUPABASE_ANON_KEY = os.environ.get('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTY2OTEzMjAsImV4cCI6MjA3MjI2NzMyMH0.Dk0FBPW8U78Pjjtdlkm9jwP_I8_f1x8mrOBVAhMQQ6M')
 SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InppdXhqa3hlbmZicWdibXNsY3p2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjY5MTMyMCwiZXhwIjoyMDcyMjY3MzIwfQ.gdG6hNXFzeHqqoazx2o6qOS1uk3cQn87MWlET-_XBhM')
 
+# Helper function to find existing user by X username or Phantom address
+def find_existing_user(x_username=None, phantom_address=None):
+    """Find existing user by X username or Phantom address"""
+    try:
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Build query parameters
+        query_params = []
+        if x_username:
+            query_params.append(f'x_username=eq.{x_username}')
+        if phantom_address:
+            query_params.append(f'phantom_address=eq.{phantom_address}')
+        
+        if not query_params:
+            return None
+            
+        # Use OR condition to find user by either X username or Phantom address
+        query = 'or=(' + ','.join(query_params) + ')'
+        
+        response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/users?{query}',
+            headers=headers
+        )
+        
+        print(f"[USER_LOOKUP] Query: {query}")
+        print(f"[USER_LOOKUP] Status: {response.status_code}")
+        print(f"[USER_LOOKUP] Response: {response.text}")
+        
+        if response.status_code == 200:
+            users = response.json()
+            return users[0] if users else None
+        else:
+            print(f"[USER_LOOKUP] Error: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"[USER_LOOKUP] Exception: {str(e)}")
+        return None
+
 # Helper function to create/update user in Supabase
-def create_or_update_user_in_db(user_data):
+def create_or_update_user_in_db(user_data, existing_user_id=None):
     """Create or update user in Supabase database"""
     try:
-        # Use service key for backend operations
         headers = {
             'apikey': SUPABASE_SERVICE_KEY,
             'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
@@ -40,7 +82,6 @@ def create_or_update_user_in_db(user_data):
         
         # Prepare user data for database
         db_user_data = {
-            'id': user_data.get('id'),
             'username': user_data.get('username'),
             'x_username': user_data.get('x_username'),
             'phantom_address': user_data.get('phantom_address')
@@ -49,27 +90,36 @@ def create_or_update_user_in_db(user_data):
         # Remove None values
         db_user_data = {k: v for k, v in db_user_data.items() if v is not None}
         
-        # Use upsert with on_conflict parameter for PostgreSQL UPSERT
-        headers['Prefer'] = 'resolution=merge-duplicates,return=representation'
+        if existing_user_id:
+            # Update existing user
+            print(f"[USER_UPDATE] Updating existing user {existing_user_id}")
+            response = requests.patch(
+                f'{SUPABASE_URL}/rest/v1/users?id=eq.{existing_user_id}',
+                headers=headers,
+                json=db_user_data
+            )
+        else:
+            # Create new user
+            print(f"[USER_CREATE] Creating new user")
+            db_user_data['id'] = str(uuid.uuid4())
+            response = requests.post(
+                f'{SUPABASE_URL}/rest/v1/users',
+                headers=headers,
+                json=db_user_data
+            )
         
-        # Upsert user (insert or update if exists)
-        response = requests.post(
-            f'{SUPABASE_URL}/rest/v1/users',
-            headers=headers,
-            json=db_user_data
-        )
-        
-        print(f"[USER_CREATE] Status: {response.status_code}")
-        print(f"[USER_CREATE] Response: {response.text}")
+        print(f"[USER_DB] Status: {response.status_code}")
+        print(f"[USER_DB] Response: {response.text}")
         
         if response.status_code in [200, 201]:
-            return response.json()
+            result = response.json()
+            return result[0] if isinstance(result, list) and result else result
         else:
-            print(f"[USER_CREATE] Error creating user: {response.text}")
+            print(f"[USER_DB] Error: {response.text}")
             return None
             
     except Exception as e:
-        print(f"[USER_CREATE] Exception: {str(e)}")
+        print(f"[USER_DB] Exception: {str(e)}")
         return None
 
 # X OAuth 2.0 endpoints
@@ -253,28 +303,32 @@ def x_callback():
             user_data = user_response.json()
             user_info = user_data.get('data', {})
             
-            # Create/update user in Supabase database
+            # Look for existing user first
+            x_username = user_info.get('username', '')
+            existing_user = find_existing_user(x_username=x_username)
+            
+            # Prepare user data for database
             db_user_data = {
-                'id': str(uuid.uuid4()),  # Generate new UUID for database
-                'username': user_info.get('username', ''),
-                'x_username': user_info.get('username', ''),
+                'username': x_username,
+                'x_username': x_username,
                 'phantom_address': None  # Will be set when Phantom connects
             }
             
-            # Create user in database
+            # Create or update user in database
             try:
-                db_user = create_or_update_user_in_db(db_user_data)
+                if existing_user:
+                    print(f"[X_AUTH] Found existing user: {existing_user['id']}")
+                    db_user = create_or_update_user_in_db(db_user_data, existing_user['id'])
+                else:
+                    print(f"[X_AUTH] Creating new user for X username: {x_username}")
+                    db_user = create_or_update_user_in_db(db_user_data)
+                
                 if db_user:
                     print(f"[X_AUTH] User created/updated in database: {db_user}")
                     # Store database user ID in session
-                    if isinstance(db_user, list) and db_user:
-                        user_info['db_id'] = db_user[0]['id']
-                    elif isinstance(db_user, dict):
-                        user_info['db_id'] = db_user.get('id')
-                    else:
-                        print(f"[X_AUTH] Unexpected db_user format: {type(db_user)}")
+                    user_info['db_id'] = db_user.get('id')
                 else:
-                    print(f"[X_AUTH] Failed to create user in database")
+                    print(f"[X_AUTH] Failed to create/update user in database")
             except Exception as db_error:
                 print(f"[X_AUTH] Database error: {str(db_error)}")
                 # Continue without database user - authentication still works
@@ -408,34 +462,48 @@ def phantom_connect():
                 'error': 'No public key provided'
             }), 400
         
-        # Check if user already exists (from X auth) or create new one
+        # Check if user already exists (from session or database lookup)
         user_info = session.get('user_info', {})
+        existing_user = None
         
+        # First try to find by current session user ID
         if user_info and user_info.get('db_id'):
-            # User exists from X auth, update with Phantom address
+            print(f"[PHANTOM] Using existing user from session: {user_info['db_id']}")
+            existing_user = {'id': user_info['db_id']}
+        else:
+            # Look for existing user by Phantom address or X username
+            x_username = user_info.get('username') if user_info else None
+            existing_user = find_existing_user(x_username=x_username, phantom_address=public_key)
+        
+        # Prepare user data for database
+        if existing_user:
+            # Update existing user with Phantom address
             db_user_data = {
-                'id': user_info['db_id'],
                 'phantom_address': public_key
             }
-            print(f"[PHANTOM] Updating existing user {user_info['db_id']} with Phantom address")
+            # If we have X username from session, make sure it's in the update
+            if user_info and user_info.get('username'):
+                db_user_data['x_username'] = user_info.get('username')
+                db_user_data['username'] = user_info.get('username')
+            
+            print(f"[PHANTOM] Updating existing user {existing_user['id']} with Phantom address")
+            db_user = create_or_update_user_in_db(db_user_data, existing_user['id'])
         else:
             # Create new user with just Phantom wallet
             db_user_data = {
-                'id': str(uuid.uuid4()),
                 'username': f'phantom_user_{public_key[:8]}',  # Generate username from public key
                 'x_username': None,
                 'phantom_address': public_key
             }
             print(f"[PHANTOM] Creating new user with Phantom address")
+            db_user = create_or_update_user_in_db(db_user_data)
         
-        # Create/update user in database
-        db_user = create_or_update_user_in_db(db_user_data)
         if db_user:
             print(f"[PHANTOM] User created/updated in database: {db_user}")
             # Update session with database user ID
             if not user_info:
                 user_info = {}
-            user_info['db_id'] = db_user[0]['id'] if isinstance(db_user, list) and db_user else db_user.get('id')
+            user_info['db_id'] = db_user.get('id')
             user_info['phantom_address'] = public_key
             session['user_info'] = user_info
         else:
