@@ -1826,46 +1826,218 @@
             }, 1000);
         }
 
-        function acceptBattle() {
-            clearInterval(battleAcceptTimer);
-            document.getElementById('battleAcceptModal').classList.add('hidden');
-            
-            // Remove from queue
-            userQueue = userQueue.filter(q => q.id !== currentBattleMatch.user.id);
-            
-            // Add to active battles
-            const battle = {
-                id: Date.now(),
-                user: currentBattleMatch.user,
-                opponent: currentBattleMatch.opponent,
-                potSize: currentBattleMatch.potSize,
-                startTime: Date.now(),
-                endTime: Date.now() + (4 * 60 * 60 * 1000), // 4 hours
-                status: 'active'
-            };
-            
-            activeBattles.push(battle);
-            updateQueueDisplay();
-            
-            // Show success message
-            const statusDiv = document.getElementById('status');
-            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
-            statusDiv.textContent = `⚔️ Battle accepted! $${battle.potSize} pot • Ends in 4 hours`;
-            
-            // Schedule battle resolution
-            setTimeout(() => resolveBattle(battle), 4 * 60 * 60 * 1000);
-            currentBattleMatch = null;
+        async function acceptBattle() {
+            try {
+                clearInterval(battleAcceptTimer);
+                
+                // Show loading state
+                const acceptBtn = document.querySelector('button[onclick="acceptBattle()"]');
+                const declineBtn = document.querySelector('button[onclick="declineBattle()"]');
+                acceptBtn.disabled = true;
+                declineBtn.disabled = true;
+                acceptBtn.innerHTML = '⏳ Accepting...';
+                
+                console.log('🔥 [BATTLE_ACCEPT] Accepting battle:', currentBattleMatch.battleId);
+                
+                // Call backend API to accept battle
+                const response = await fetch(`/api/battles/${currentBattleMatch.battleId}/accept`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                console.log('🔥 [BATTLE_ACCEPT] Accept result:', result);
+                
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to accept battle');
+                }
+                
+                document.getElementById('battleAcceptModal').classList.add('hidden');
+                
+                // Remove from queue
+                userQueue = userQueue.filter(q => q.id !== currentBattleMatch.user.id);
+                updateQueueDisplay();
+                
+                const statusDiv = document.getElementById('status');
+                
+                if (result.both_accepted) {
+                    // Both users accepted - battle is now active!
+                    const battle = {
+                        id: currentBattleMatch.battleId,
+                        user: currentBattleMatch.user,
+                        opponent: currentBattleMatch.opponent,
+                        potSize: currentBattleMatch.potSize,
+                        startTime: Date.now(),
+                        endTime: Date.now() + (4 * 60 * 60 * 1000), // 4 hours
+                        status: 'active'
+                    };
+                    
+                    activeBattles.push(battle);
+                    
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                    statusDiv.textContent = `🎉 Battle started! Both players accepted. $${battle.potSize} pot • Ends in 4 hours`;
+                    
+                    console.log('🎉 [BATTLE_ACCEPT] Battle is now active - both users accepted!');
+                } else {
+                    // You accepted, waiting for opponent
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-blue-900/20 border border-blue-500/30 text-blue-300';
+                    statusDiv.textContent = `✅ You accepted the battle! Waiting for opponent to accept...`;
+                    
+                    console.log('⏳ [BATTLE_ACCEPT] Waiting for opponent to accept...');
+                    
+                    // Start polling for opponent acceptance
+                    startOpponentAcceptancePolling(currentBattleMatch.battleId);
+                }
+                
+                currentBattleMatch = null;
+                
+            } catch (error) {
+                console.error('❌ [BATTLE_ACCEPT] Error accepting battle:', error);
+                
+                // Re-enable buttons
+                const acceptBtn = document.querySelector('button[onclick="acceptBattle()"]');
+                const declineBtn = document.querySelector('button[onclick="declineBattle()"]');
+                acceptBtn.disabled = false;
+                declineBtn.disabled = false;
+                acceptBtn.innerHTML = '✅ Accept';
+                
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = `❌ Failed to accept battle: ${error.message}`;
+            }
         }
 
-        function declineBattle() {
-            clearInterval(battleAcceptTimer);
-            document.getElementById('battleAcceptModal').classList.add('hidden');
-            currentBattleMatch = null;
+        async function declineBattle() {
+            try {
+                clearInterval(battleAcceptTimer);
+                
+                // Show loading state
+                const acceptBtn = document.querySelector('button[onclick="acceptBattle()"]');
+                const declineBtn = document.querySelector('button[onclick="declineBattle()"]');
+                acceptBtn.disabled = true;
+                declineBtn.disabled = true;
+                declineBtn.innerHTML = '⏳ Declining...';
+                
+                console.log('❌ [BATTLE_DECLINE] Declining battle:', currentBattleMatch.battleId);
+                
+                // Call backend API to decline battle
+                const response = await fetch(`/api/battles/${currentBattleMatch.battleId}/decline`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+                
+                const result = await response.json();
+                console.log('❌ [BATTLE_DECLINE] Decline result:', result);
+                
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to decline battle');
+                }
+                
+                document.getElementById('battleAcceptModal').classList.add('hidden');
+                currentBattleMatch = null;
+                
+                // Show message
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-yellow-900/20 border border-yellow-500/30 text-yellow-300';
+                statusDiv.textContent = '❌ Battle declined. Your prediction is back in the queue searching for opponents...';
+                
+                console.log('❌ [BATTLE_DECLINE] Battle declined and predictions reset to searching');
+                
+            } catch (error) {
+                console.error('❌ [BATTLE_DECLINE] Error declining battle:', error);
+                
+                // Re-enable buttons
+                const acceptBtn = document.querySelector('button[onclick="acceptBattle()"]');
+                const declineBtn = document.querySelector('button[onclick="declineBattle()"]');
+                acceptBtn.disabled = false;
+                declineBtn.disabled = false;
+                declineBtn.innerHTML = '❌ Decline';
+                
+                const statusDiv = document.getElementById('status');
+                statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                statusDiv.textContent = `❌ Failed to decline battle: ${error.message}`;
+            }
+        }
+
+        function startOpponentAcceptancePolling(battleId) {
+            console.log('⏳ [OPPONENT_POLLING] Starting polling for battle:', battleId);
             
-            // Show message
-            const statusDiv = document.getElementById('status');
-            statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-yellow-900/20 border border-yellow-500/30 text-yellow-300';
-            statusDiv.textContent = '❌ Battle declined. Continuing search for opponents...';
+            let pollCount = 0;
+            const maxPolls = 60; // Poll for 60 seconds (60 * 1 second intervals)
+            
+            const pollInterval = setInterval(async () => {
+                try {
+                    pollCount++;
+                    console.log(`🔄 [OPPONENT_POLLING] Poll ${pollCount}/${maxPolls} for battle ${battleId}`);
+                    
+                    const response = await fetch(`/api/battles/${battleId}/status`, {
+                        method: 'GET',
+                        credentials: 'include'
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!result.success) {
+                        console.error('❌ [OPPONENT_POLLING] Status check failed:', result.error);
+                        clearInterval(pollInterval);
+                        return;
+                    }
+                    
+                    const battle = result.battle;
+                    const invitation = result.invitation;
+                    
+                    if (result.both_accepted && battle.status === 'active') {
+                        // Both users accepted - battle is active!
+                        clearInterval(pollInterval);
+                        
+                        console.log('🎉 [OPPONENT_POLLING] Both users accepted! Battle is now active');
+                        
+                        const statusDiv = document.getElementById('status');
+                        statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-green-900/20 border border-green-500/30 text-green-300';
+                        statusDiv.textContent = `🎉 Battle started! Your opponent also accepted. $${battle.pot_size} pot • Ends in 4 hours`;
+                        
+                        // Add to active battles (if not already there)
+                        if (!activeBattles.find(b => b.id === battleId)) {
+                            activeBattles.push({
+                                id: battleId,
+                                potSize: battle.pot_size,
+                                startTime: Date.now(),
+                                endTime: Date.now() + (4 * 60 * 60 * 1000),
+                                status: 'active'
+                            });
+                            updateQueueDisplay();
+                        }
+                        
+                    } else if (battle.status === 'cancelled') {
+                        // Opponent declined
+                        clearInterval(pollInterval);
+                        
+                        console.log('❌ [OPPONENT_POLLING] Opponent declined the battle');
+                        
+                        const statusDiv = document.getElementById('status');
+                        statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-orange-900/20 border border-orange-500/30 text-orange-300';
+                        statusDiv.textContent = '😞 Your opponent declined the battle. Searching for new opponents...';
+                        
+                    } else if (pollCount >= maxPolls) {
+                        // Timeout - opponent didn't respond
+                        clearInterval(pollInterval);
+                        
+                        console.log('⏰ [OPPONENT_POLLING] Timeout - opponent did not respond');
+                        
+                        const statusDiv = document.getElementById('status');
+                        statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-gray-900/20 border border-gray-500/30 text-gray-300';
+                        statusDiv.textContent = '⏰ Battle invitation expired. Your opponent did not respond in time.';
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ [OPPONENT_POLLING] Error:', error);
+                    clearInterval(pollInterval);
+                    
+                    const statusDiv = document.getElementById('status');
+                    statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-red-900/20 border border-red-500/30 text-red-300';
+                    statusDiv.textContent = '❌ Error checking battle status. Please try again.';
+                }
+            }, 1000); // Poll every second
         }
 
         function updateQueueDisplay() {

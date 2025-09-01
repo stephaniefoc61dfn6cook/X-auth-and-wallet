@@ -1213,6 +1213,323 @@ def cancel_prediction(prediction_id):
             'error': str(e)
         }), 500
 
+@app.route('/api/battles/<battle_id>/accept', methods=['POST'])
+def accept_battle(battle_id):
+    """Accept a battle invitation using service key to bypass RLS"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        # Get user ID from session
+        user_id = user_info.get('db_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User database ID not found'
+            }), 400
+        
+        print(f"[BATTLE_ACCEPT] User {user_id} accepting battle {battle_id}")
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+        }
+        
+        # Get battle details to determine which user is accepting
+        battle_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}&select=*',
+            headers=headers
+        )
+        
+        if battle_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get battle: {battle_response.text}'
+            }), 500
+        
+        battles = battle_response.json()
+        if not battles:
+            return jsonify({
+                'success': False,
+                'error': 'Battle not found'
+            }), 404
+        
+        battle = battles[0]
+        
+        # Determine if user is user1 or user2
+        is_user1 = battle['user1_id'] == user_id
+        is_user2 = battle['user2_id'] == user_id
+        
+        if not (is_user1 or is_user2):
+            return jsonify({
+                'success': False,
+                'error': 'User is not part of this battle'
+            }), 403
+        
+        # Update battle acceptance
+        update_data = {}
+        if is_user1:
+            update_data['user1_accepted'] = True
+            update_data['user1_accepted_at'] = 'NOW()'
+            user_field = 'user1_accepted'
+            other_user_field = 'user2_accepted'
+        else:
+            update_data['user2_accepted'] = True
+            update_data['user2_accepted_at'] = 'NOW()'
+            user_field = 'user2_accepted'
+            other_user_field = 'user1_accepted'
+        
+        # Update battle
+        update_response = requests.patch(
+            f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}',
+            headers=headers,
+            json=update_data
+        )
+        
+        print(f"[BATTLE_ACCEPT] Battle update status: {update_response.status_code}")
+        
+        if update_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to update battle: {update_response.text}'
+            }), 500
+        
+        # Update battle invitation with user response
+        invitation_update = {}
+        if is_user1:
+            invitation_update['user1_response'] = 'accepted'
+            invitation_update['user1_responded_at'] = 'NOW()'
+        else:
+            invitation_update['user2_response'] = 'accepted'
+            invitation_update['user2_responded_at'] = 'NOW()'
+        
+        invitation_response = requests.patch(
+            f'{SUPABASE_URL}/rest/v1/battle_invitations?battle_id=eq.{battle_id}',
+            headers=headers,
+            json=invitation_update
+        )
+        
+        # Check if both users have accepted
+        updated_battle_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}&select=user1_accepted,user2_accepted',
+            headers=headers
+        )
+        
+        if updated_battle_response.status_code == 200:
+            updated_battle = updated_battle_response.json()[0]
+            both_accepted = updated_battle['user1_accepted'] and updated_battle['user2_accepted']
+            
+            if both_accepted:
+                # Activate the battle
+                activate_response = requests.patch(
+                    f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}',
+                    headers=headers,
+                    json={'status': 'active'}
+                )
+                
+                # Update invitation status
+                requests.patch(
+                    f'{SUPABASE_URL}/rest/v1/battle_invitations?battle_id=eq.{battle_id}',
+                    headers=headers,
+                    json={'status': 'accepted'}
+                )
+                
+                print(f"[BATTLE_ACCEPT] Battle {battle_id} activated - both users accepted")
+        
+        return jsonify({
+            'success': True,
+            'user_accepted': True,
+            'both_accepted': both_accepted if 'both_accepted' in locals() else False,
+            'battle_status': 'active' if both_accepted else 'pending_acceptance'
+        })
+        
+    except Exception as e:
+        print(f"[BATTLE_ACCEPT] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/battles/<battle_id>/decline', methods=['POST'])
+def decline_battle(battle_id):
+    """Decline a battle invitation using service key to bypass RLS"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        # Get user ID from session
+        user_id = user_info.get('db_id')
+        if not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'User database ID not found'
+            }), 400
+        
+        print(f"[BATTLE_DECLINE] User {user_id} declining battle {battle_id}")
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+        }
+        
+        # Get battle details
+        battle_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}&select=*',
+            headers=headers
+        )
+        
+        if battle_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get battle: {battle_response.text}'
+            }), 500
+        
+        battles = battle_response.json()
+        if not battles:
+            return jsonify({
+                'success': False,
+                'error': 'Battle not found'
+            }), 404
+        
+        battle = battles[0]
+        
+        # Determine if user is user1 or user2
+        is_user1 = battle['user1_id'] == user_id
+        is_user2 = battle['user2_id'] == user_id
+        
+        if not (is_user1 or is_user2):
+            return jsonify({
+                'success': False,
+                'error': 'User is not part of this battle'
+            }), 403
+        
+        # Cancel the battle
+        cancel_response = requests.patch(
+            f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}',
+            headers=headers,
+            json={'status': 'cancelled'}
+        )
+        
+        # Update battle invitation with user response
+        invitation_update = {'status': 'declined'}
+        if is_user1:
+            invitation_update['user1_response'] = 'declined'
+            invitation_update['user1_responded_at'] = 'NOW()'
+        else:
+            invitation_update['user2_response'] = 'declined'
+            invitation_update['user2_responded_at'] = 'NOW()'
+        
+        invitation_response = requests.patch(
+            f'{SUPABASE_URL}/rest/v1/battle_invitations?battle_id=eq.{battle_id}',
+            headers=headers,
+            json=invitation_update
+        )
+        
+        # Reset predictions back to 'searching' status so they can be matched again
+        reset_predictions_response = requests.patch(
+            f'{SUPABASE_URL}/rest/v1/predictions?id=in.({battle["user1_prediction_id"]},{battle["user2_prediction_id"]})',
+            headers=headers,
+            json={'status': 'searching'}
+        )
+        
+        print(f"[BATTLE_DECLINE] Battle {battle_id} cancelled and predictions reset to searching")
+        
+        return jsonify({
+            'success': True,
+            'battle_cancelled': True,
+            'predictions_reset': True
+        })
+        
+    except Exception as e:
+        print(f"[BATTLE_DECLINE] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/battles/<battle_id>/status', methods=['GET'])
+def get_battle_status(battle_id):
+    """Get battle status and acceptance details using service key to bypass RLS"""
+    try:
+        # Check authentication
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
+        
+        if not (user_info or phantom_wallet):
+            return jsonify({
+                'success': False,
+                'error': 'Authentication required'
+            }), 401
+        
+        # Use service key to bypass RLS
+        headers = {
+            'apikey': SUPABASE_SERVICE_KEY,
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': 'application/json'
+        }
+        
+        # Get battle and invitation details
+        battle_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/battles?id=eq.{battle_id}&select=*',
+            headers=headers
+        )
+        
+        invitation_response = requests.get(
+            f'{SUPABASE_URL}/rest/v1/battle_invitations?battle_id=eq.{battle_id}&select=*',
+            headers=headers
+        )
+        
+        if battle_response.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f'Failed to get battle: {battle_response.text}'
+            }), 500
+        
+        battles = battle_response.json()
+        if not battles:
+            return jsonify({
+                'success': False,
+                'error': 'Battle not found'
+            }), 404
+        
+        battle = battles[0]
+        invitation = invitation_response.json()[0] if invitation_response.status_code == 200 and invitation_response.json() else None
+        
+        return jsonify({
+            'success': True,
+            'battle': battle,
+            'invitation': invitation,
+            'both_accepted': battle['user1_accepted'] and battle['user2_accepted'],
+            'is_active': battle['status'] == 'active'
+        })
+        
+    except Exception as e:
+        print(f"[BATTLE_STATUS] Exception: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
