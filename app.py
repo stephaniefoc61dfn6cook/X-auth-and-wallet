@@ -262,13 +262,22 @@ def x_callback():
             }
             
             # Create user in database
-            db_user = create_or_update_user_in_db(db_user_data)
-            if db_user:
-                print(f"[X_AUTH] User created/updated in database: {db_user}")
-                # Store database user ID in session
-                user_info['db_id'] = db_user[0]['id'] if isinstance(db_user, list) and db_user else db_user.get('id')
-            else:
-                print(f"[X_AUTH] Failed to create user in database")
+            try:
+                db_user = create_or_update_user_in_db(db_user_data)
+                if db_user:
+                    print(f"[X_AUTH] User created/updated in database: {db_user}")
+                    # Store database user ID in session
+                    if isinstance(db_user, list) and db_user:
+                        user_info['db_id'] = db_user[0]['id']
+                    elif isinstance(db_user, dict):
+                        user_info['db_id'] = db_user.get('id')
+                    else:
+                        print(f"[X_AUTH] Unexpected db_user format: {type(db_user)}")
+                else:
+                    print(f"[X_AUTH] Failed to create user in database")
+            except Exception as db_error:
+                print(f"[X_AUTH] Database error: {str(db_error)}")
+                # Continue without database user - authentication still works
             
             # Store user info in session
             session['user_info'] = user_info
@@ -319,31 +328,63 @@ def x_callback():
 @app.route('/auth/status')
 def auth_status():
     """Check authentication status"""
-    user_info = session.get('user_info')
-    phantom_wallet = session.get('phantom_wallet')
-    
-    if user_info or phantom_wallet:
-        # Ensure we have database user ID
-        db_id = user_info.get('db_id') if user_info else None
+    try:
+        user_info = session.get('user_info', {})
+        phantom_wallet = session.get('phantom_wallet', {})
         
-        response_data = {
-            'authenticated': True,
-            'user': {
-                'id': db_id,  # Database user ID for PvP system
-                'username': user_info.get('username', f"phantom_user_{phantom_wallet.get('publicKey', '')[:8]}") if user_info else f"phantom_user_{phantom_wallet.get('publicKey', '')[:8]}",
-                'x_username': user_info.get('username') if user_info else None,
-                'phantom_address': user_info.get('phantom_address') or (phantom_wallet.get('publicKey') if phantom_wallet else None),
-                'has_x': bool(user_info),
-                'has_phantom': bool(phantom_wallet)
+        print(f"[AUTH_STATUS] Session user_info: {user_info}")
+        print(f"[AUTH_STATUS] Session phantom_wallet: {phantom_wallet}")
+        
+        if user_info or phantom_wallet:
+            # Ensure we have database user ID
+            db_id = user_info.get('db_id') if user_info else None
+            
+            # Generate safe username
+            if user_info and user_info.get('username'):
+                username = user_info.get('username')
+            elif phantom_wallet and phantom_wallet.get('publicKey'):
+                username = f"phantom_user_{phantom_wallet.get('publicKey')[:8]}"
+            else:
+                username = "anonymous_user"
+            
+            # Get phantom address safely
+            phantom_address = None
+            if user_info and user_info.get('phantom_address'):
+                phantom_address = user_info.get('phantom_address')
+            elif phantom_wallet and phantom_wallet.get('publicKey'):
+                phantom_address = phantom_wallet.get('publicKey')
+            
+            response_data = {
+                'authenticated': True,
+                'user': {
+                    'id': db_id,  # Database user ID for PvP system
+                    'username': username,
+                    'x_username': user_info.get('username') if user_info else None,
+                    'phantom_address': phantom_address,
+                    'has_x': bool(user_info and user_info.get('username')),
+                    'has_phantom': bool(phantom_wallet and phantom_wallet.get('connected'))
+                }
             }
-        }
+            
+            print(f"[AUTH_STATUS] Returning user data: {response_data}")
+            return jsonify(response_data)
+        else:
+            print(f"[AUTH_STATUS] No authentication found")
+            return jsonify({
+                'authenticated': False
+            })
+            
+    except Exception as e:
+        print(f"[AUTH_STATUS] Error: {str(e)}")
+        print(f"[AUTH_STATUS] Exception type: {type(e).__name__}")
+        import traceback
+        print(f"[AUTH_STATUS] Traceback: {traceback.format_exc()}")
         
-        print(f"[AUTH_STATUS] Returning user data: {response_data}")
-        return jsonify(response_data)
-    else:
+        # Return safe JSON response even on error
         return jsonify({
-            'authenticated': False
-        })
+            'authenticated': False,
+            'error': 'Internal server error'
+        }), 500
 
 @app.route('/auth/logout')
 def logout():
