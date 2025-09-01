@@ -2032,13 +2032,33 @@
                         
                         // Add to active battles (if not already there)
                         if (!activeBattles.find(b => b.id === battleId)) {
-                            activeBattles.push({
+                            // Get opponent details from battle
+                            const isUser1 = battle.user1_id === currentUser.id;
+                            const opponentUser = isUser1 ? battle.user2 : battle.user1;
+                            const userPrediction = isUser1 ? battle.user1_prediction : battle.user2_prediction;
+                            const opponentPrediction = isUser1 ? battle.user2_prediction : battle.user1_prediction;
+                            
+                            const activeBattle = {
                                 id: battleId,
+                                user: {
+                                    username: currentUser.username,
+                                    price: userPrediction.predicted_price,
+                                    direction: userPrediction.direction,
+                                    betAmount: userPrediction.bet_amount
+                                },
+                                opponent: {
+                                    username: opponentUser?.username || opponentUser?.x_username || 'Anonymous',
+                                    price: opponentPrediction.predicted_price,
+                                    direction: opponentPrediction.direction,
+                                    betAmount: opponentPrediction.bet_amount
+                                },
                                 potSize: battle.pot_size,
                                 startTime: Date.now(),
                                 endTime: Date.now() + (4 * 60 * 60 * 1000),
                                 status: 'active'
-                            });
+                            };
+                            
+                            activeBattles.push(activeBattle);
                             updateQueueDisplay();
                         }
                         
@@ -2112,15 +2132,18 @@
                 emptyBattles.style.display = 'block';
             } else {
                 emptyBattles.style.display = 'none';
-                activeBattlesList.innerHTML = activeBattles.map(battle => `
+                activeBattlesList.innerHTML = activeBattles.filter(battle => {
+                    // Filter out malformed battle objects
+                    return battle && battle.opponent && battle.user && battle.opponent.username && battle.user.direction;
+                }).map(battle => `
                     <div class="bg-gaming-primary/10 rounded-lg p-4 border border-gaming-primary/30">
                         <div class="flex justify-between items-center mb-2">
                             <div class="font-medium text-gaming-primary">⚔️ vs @${battle.opponent.username}</div>
-                            <div class="text-sm text-gaming-primary font-bold">$${battle.potSize} pot</div>
+                            <div class="text-sm text-gaming-primary font-bold">$${battle.potSize || 0} pot</div>
                         </div>
                         <div class="text-sm text-muted-foreground mb-2">
-                            You: ${battle.user.direction === 'below' ? '📉' : '📈'} $${battle.user.price.toLocaleString()} • 
-                            Opponent: ${battle.opponent.direction === 'below' ? '📉' : '📈'} $${battle.opponent.price.toLocaleString()}
+                            You: ${battle.user.direction === 'below' ? '📉' : '📈'} $${(battle.user.price || 0).toLocaleString()} • 
+                            Opponent: ${battle.opponent.direction === 'below' ? '📉' : '📈'} $${(battle.opponent.price || 0).toLocaleString()}
                         </div>
                         <div class="text-xs text-gaming-secondary">
                             ⏰ ${getTimeRemaining(battle.endTime)}
