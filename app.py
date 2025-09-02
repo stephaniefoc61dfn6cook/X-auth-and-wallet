@@ -317,28 +317,49 @@ def x_callback():
             
             # Look for existing user first
             x_username = user_info.get('username', '')
-            existing_user = find_existing_user(x_username=x_username)
+            
+            # Check if user already exists in session (e.g., from Phantom connection)
+            session_user_info = session.get('user_info', {})
+            if session_user_info and session_user_info.get('db_id'):
+                print(f"[X_AUTH] Found existing user in session: {session_user_info['db_id']}")
+                # Get the full user record to use as existing_user
+                existing_user = {'id': session_user_info['db_id']}
+            else:
+                # Look for existing user by X username
+                existing_user = find_existing_user(x_username=x_username)
             
             # Prepare user data for database
             db_user_data = {
                 'username': x_username,
-                'x_username': x_username,
-                'phantom_address': None  # Will be set when Phantom connects
+                'x_username': x_username
             }
+            
+            # If updating existing user, preserve existing phantom_address
+            if not existing_user:
+                db_user_data['phantom_address'] = None  # Will be set when Phantom connects
             
             # Create or update user in database
             try:
                 if existing_user:
-                    print(f"[X_AUTH] Found existing user: {existing_user['id']}")
+                    print(f"[X_AUTH] Updating existing user: {existing_user['id']} with X credentials")
+                    print(f"[X_AUTH] Update data: {db_user_data}")
                     db_user = create_or_update_user_in_db(db_user_data, existing_user['id'])
                 else:
                     print(f"[X_AUTH] Creating new user for X username: {x_username}")
+                    print(f"[X_AUTH] Create data: {db_user_data}")
                     db_user = create_or_update_user_in_db(db_user_data)
                 
                 if db_user:
                     print(f"[X_AUTH] User created/updated in database: {db_user}")
                     # Store database user ID in session
                     user_info['db_id'] = db_user.get('id')
+                    
+                    # Merge with existing session data (preserve Phantom info if exists)
+                    if session_user_info:
+                        # Preserve existing phantom data
+                        if session_user_info.get('phantom_address'):
+                            user_info['phantom_address'] = session_user_info.get('phantom_address')
+                        print(f"[X_AUTH] Merged session data: X + existing Phantom info")
                 else:
                     print(f"[X_AUTH] Failed to create/update user in database")
             except Exception as db_error:
