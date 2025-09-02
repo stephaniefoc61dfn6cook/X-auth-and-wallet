@@ -2157,9 +2157,14 @@
 
         async function exitQueue(queueId) {
             try {
-                if (currentUser) {
-                    // Use backend API to cancel prediction
-                    const cancelResponse = await fetch(`/api/predictions/${queueId}/cancel`, {
+                // Find the queue entry to get the prediction ID
+                const queueEntry = userQueue.find(q => q.id === queueId);
+                
+                if (currentUser && queueEntry && queueEntry.predictionId) {
+                    // Use backend API to cancel prediction with the correct UUID
+                    console.log(`❌ [QUEUE_EXIT] Canceling prediction ${queueEntry.predictionId} for queue entry ${queueId}`);
+                    
+                    const cancelResponse = await fetch(`/api/predictions/${queueEntry.predictionId}/cancel`, {
                         method: 'POST',
                         credentials: 'include'
                     });
@@ -2170,15 +2175,15 @@
                     if (!cancelResult.success) {
                         console.error('Failed to cancel prediction:', cancelResult.error);
                     }
-                    
-                    // Refresh user data
-                    await loadUserData();
-                    updateQueueDisplay();
-                } else {
-                    // Fallback to local
-                    userQueue = userQueue.filter(q => q.id !== queueId);
-                    updateQueueDisplay();
+                } else if (!queueEntry) {
+                    console.log('❌ [QUEUE_EXIT] Queue entry not found for ID:', queueId);
+                } else if (!queueEntry.predictionId) {
+                    console.log('❌ [QUEUE_EXIT] No prediction ID found for queue entry:', queueEntry);
                 }
+                
+                // Remove from local queue regardless of API result
+                userQueue = userQueue.filter(q => q.id !== queueId);
+                updateQueueDisplay();
                 
                 const statusDiv = document.getElementById('status');
                 statusDiv.className = 'mb-6 p-4 rounded-lg min-h-[60px] flex items-center justify-center text-center bg-yellow-900/20 border border-yellow-500/30 text-yellow-300';
