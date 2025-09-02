@@ -2004,7 +2004,7 @@
                     pollCount++;
                     console.log(`🔄 [OPPONENT_POLLING] Poll ${pollCount}/${maxPolls} for battle ${battleId}`);
                     
-                    const response = await fetch(`/api/battles/${battleId}/status`, {
+                    const response = await fetch(`/api/battles/${battleId}`, {
                         method: 'GET',
                         credentials: 'include'
                     });
@@ -2018,9 +2018,8 @@
                     }
                     
                     const battle = result.battle;
-                    const invitation = result.invitation;
                     
-                    if (result.both_accepted && battle.status === 'active') {
+                    if (battle.user1_accepted && battle.user2_accepted && battle.status === 'active') {
                         // Both users accepted - battle is active!
                         clearInterval(pollInterval);
                         
@@ -2033,26 +2032,29 @@
                         // Add to active battles (if not already there)
                         if (!activeBattles.find(b => b.id === battleId)) {
                             // Get opponent details from battle
+                            console.log('🔍 [OPPONENT_POLLING] Battle data:', battle);
                             const isUser1 = battle.user1_id === currentUser.id;
                             const opponentUser = isUser1 ? battle.user2 : battle.user1;
                             const userPrediction = isUser1 ? battle.user1_prediction : battle.user2_prediction;
                             const opponentPrediction = isUser1 ? battle.user2_prediction : battle.user1_prediction;
+                            console.log('🔍 [OPPONENT_POLLING] User prediction:', userPrediction);
+                            console.log('🔍 [OPPONENT_POLLING] Opponent prediction:', opponentPrediction);
                             
                             const activeBattle = {
                                 id: battleId,
                                 user: {
                                     username: currentUser.username,
-                                    price: userPrediction.predicted_price,
-                                    direction: userPrediction.direction,
-                                    betAmount: userPrediction.bet_amount
+                                    price: userPrediction?.predicted_price || 0,
+                                    direction: userPrediction?.direction || 'above',
+                                    betAmount: userPrediction?.bet_amount || 0
                                 },
                                 opponent: {
                                     username: opponentUser?.username || opponentUser?.x_username || 'Anonymous',
-                                    price: opponentPrediction.predicted_price,
-                                    direction: opponentPrediction.direction,
-                                    betAmount: opponentPrediction.bet_amount
+                                    price: opponentPrediction?.predicted_price || 0,
+                                    direction: opponentPrediction?.direction || 'below',
+                                    betAmount: opponentPrediction?.bet_amount || 0
                                 },
-                                potSize: battle.pot_size,
+                                potSize: battle.pot_size || 0,
                                 startTime: Date.now(),
                                 endTime: Date.now() + (4 * 60 * 60 * 1000),
                                 status: 'active'
